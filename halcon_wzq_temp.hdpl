@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hdevelop file_version="1.1" halcon_version="12.0.1">
+<library/>
+<procedure name="wzq_focus_xx">
+<interface>
+<io>
+<par name="Image" base_type="iconic" dimension="0"/>
+</io>
+<oc>
+<par name="Value" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>*计算图像沿X向的二阶导数</c>
+<c></c>
+<c>*截取图片的区域</c>
+<l>crop_domain (Image, ImagePart)</l>
+<c></c>
+<c>*取得图像的尺寸</c>
+<l>get_image_size (ImagePart, Width, Height)</l>
+<c></c>
+<c>*宽度不能小于3，图像最左和最右列被截除</c>
+<l>if (Width &lt; 3)</l>
+<l>    throw ('Image width should be 3 at least')</l>
+<l>endif</l>
+<c></c>
+<c>*byte转换为real</c>
+<l>convert_image_type (ImagePart, ImageConverted, 'real')</l>
+<c></c>
+<c>*二阶导数卷积</c>
+<l>convol_image (ImageConverted, ImageResult, [1, 3, 1, 1, -2, 1], 'continued')</l>
+<c></c>
+<c>*生成截取区域，截除最左和最右列</c>
+<l>gen_rectangle1 (Domain, 0, 1, Height - 1, Width - 2)</l>
+<l>reduce_domain (ImageResult, Domain, ImageReduced)</l>
+<c></c>
+<c>*</c>
+<l>pow_image (ImageReduced, ImagePow, 2)</l>
+<c></c>
+<l>gray_features (Domain, ImagePow, 'mean', Value)</l>
+<l>return ()</l>
+</body>
+<docu id="wzq_focus_xx">
+<chapters lang="zh_CN">
+<item>wzq</item>
+<item>Focus</item>
+</chapters>
+<library lang="zh_CN">SJTU</library>
+<short lang="zh_CN">计算图像沿X向的二阶导数</short>
+<parameters>
+<parameter id="Image"/>
+<parameter id="Value"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_auto_exposure">
+<interface>
+<io>
+<par name="Image" base_type="iconic" dimension="0"/>
+<par name="Region" base_type="iconic" dimension="0"/>
+</io>
+<ic>
+<par name="MeanIn" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="Exposure" base_type="ctrl" dimension="0"/>
+<par name="MeanOut" base_type="ctrl" dimension="0"/>
+<par name="Deviation" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<l>reduce_domain (Image, Region, ImageReduced)</l>
+<c></c>
+<c></c>
+<l>return ()</l>
+</body>
+<docu id="wzq_auto_exposure">
+<parameters>
+<parameter id="Deviation"/>
+<parameter id="Exposure"/>
+<parameter id="Image"/>
+<parameter id="MeanIn"/>
+<parameter id="MeanOut"/>
+<parameter id="Region"/>
+</parameters>
+</docu>
+</procedure>
+</hdevelop>

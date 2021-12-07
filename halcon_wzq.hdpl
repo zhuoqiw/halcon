@@ -1,0 +1,3679 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hdevelop file_version="1.2" halcon_version="20.11.1.0">
+<library/>
+<procedure name="compute_3d_coordinates_of_light_line">
+<interface>
+<io>
+<par name="ProfileImage" base_type="iconic" dimension="0"/>
+</io>
+<ic>
+<par name="MinGray" base_type="ctrl" dimension="0"/>
+<par name="CameraParameters" base_type="ctrl" dimension="0"/>
+<par name="LocalCameraPose" base_type="ctrl" dimension="0"/>
+<par name="ReferenceCameraPose" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="X" base_type="ctrl" dimension="0"/>
+<par name="Y" base_type="ctrl" dimension="0"/>
+<par name="Z" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure computes the 3D-coordinates of the light</c>
+<c>* line points</c>
+<c>* </c>
+<c>* The extraction of the coordinates of light line points in</c>
+<c>* the image coordinate system is performed by using the</c>
+<c>* operator measure_profile_sheet_of_light.</c>
+<c>* The 3D-coordinates are computed by projecting the extracted</c>
+<c>* coordinates to the plane z=0 of the local coordinate system.</c>
+<c>* Then those coordinates are transformed to the reference pose.</c>
+<c>* Note that if no local coordinate system is explicitly</c>
+<c>* provided, the reference coordinate system is used instead.</c>
+<c>* </c>
+<c>* WARNING: if the profile is not oriented roughly horizontal</c>
+<c>*          empty tuples are returned for X, Y and Z.</c>
+<c>* </c>
+<c>* Initialize the output controls</c>
+<l>X := []</l>
+<l>Y := []</l>
+<l>Z := []</l>
+<c>* </c>
+<c>* Check LocalCameraPose in order to determine if a transform</c>
+<c>* has to be applied after the projection from the camera to</c>
+<c>* the z=0 plane</c>
+<l>if (LocalCameraPose == [])</l>
+<l>    DoTransform := 0</l>
+<l>    LocalCameraPose := ReferenceCameraPose</l>
+<l>elseif (LocalCameraPose == ReferenceCameraPose)</l>
+<l>    DoTransform := 0</l>
+<c>    * </c>
+<l>else</l>
+<l>    DoTransform := 1</l>
+<l>endif</l>
+<c>* </c>
+<c>* Compute the pose for the projection of the</c>
+<c>* local coordinate system to the plane z=0</c>
+<l>pose_to_hom_mat3d (LocalCameraPose, HomMat3D_LocalToCam)</l>
+<c>* </c>
+<c>* Compute the homography which transform the 3D-coordinates</c>
+<c>* of points from the local coordinate system to the reference</c>
+<c>* coordinate system</c>
+<l>if (DoTransform)</l>
+<l>    pose_to_hom_mat3d (ReferenceCameraPose, HomMat3D_ReferenceToCam)</l>
+<l>    hom_mat3d_invert (HomMat3D_ReferenceToCam, HomMat3D_CamToReference)</l>
+<l>    hom_mat3d_compose (HomMat3D_CamToReference, HomMat3D_LocalToCam, HomMat3D_LocalToReference)</l>
+<l>endif</l>
+<c>* </c>
+<c>* Determine the profile region and test if the profile is</c>
+<c>* oriented roughly horizontal</c>
+<l>threshold (ProfileImage, Region, MinGray, 999999999)</l>
+<l>orientation_region (Region, Phi)</l>
+<l>if (cos(Phi) &gt; cos(rad(135)) and cos(Phi) &lt; cos(rad(45)))</l>
+<c>    * The detected profile is NOT oriented roughly horizontal,</c>
+<c>    * therefore return empty tuples X, Y and Z.</c>
+<l>    return ()</l>
+<l>endif</l>
+<l>dilation_circle (Region, RegionDilation, 5.5)</l>
+<l>smallest_rectangle1 (RegionDilation, Row1, Column1, Row2, Column2)</l>
+<l>gen_rectangle1 (ProfileRegion, Row1, Column1, Row2, Column2)</l>
+<l>get_domain (ProfileImage, Domain)</l>
+<l>intersection (ProfileRegion, Domain, ProfileRegion)</l>
+<c>* </c>
+<c>* Get the 2D-coordinates of the points on the light line</c>
+<l>create_sheet_of_light_model (ProfileRegion, ['min_gray','num_profiles'], [MinGray,1], SheetOfLightHandle)</l>
+<l>measure_profile_sheet_of_light (ProfileImage, SheetOfLightHandle, [])</l>
+<l>get_sheet_of_light_result (Disparity, SheetOfLightHandle, 'disparity')</l>
+<l>clear_sheet_of_light_model (SheetOfLightHandle)</l>
+<c>* </c>
+<c>* Get the 3D-coordinates of the points on the light line</c>
+<c>* in the coordinate system defined by ReferenceCameraPose</c>
+<l>get_domain (Disparity, DisparityDomain)</l>
+<l>get_region_points (DisparityDomain, Rows, Columns)</l>
+<l>get_grayval (Disparity, Rows, Columns, Disparities)</l>
+<c>* </c>
+<c>* Project those points to the z=0 plane of the WCS</c>
+<l>image_points_to_world_plane (CameraParameters, LocalCameraPose, Disparities, Columns + Column1, 1.0, X, Y)</l>
+<l>tuple_gen_const (|Columns|, 0.0, Z)</l>
+<c>* </c>
+<c>* If necessary, transform the 3D-coordinates from the</c>
+<c>* local coordinate system to the reference coordinate</c>
+<c>* system</c>
+<l>if (DoTransform)</l>
+<l>    affine_trans_point_3d (HomMat3D_LocalToReference, X, Y, Z, X, Y, Z)</l>
+<l>endif</l>
+<l>return ()</l>
+</body>
+<docu id="compute_3d_coordinates_of_light_line">
+<parameters>
+<parameter id="CameraParameters"/>
+<parameter id="LocalCameraPose"/>
+<parameter id="MinGray"/>
+<parameter id="ProfileImage"/>
+<parameter id="ReferenceCameraPose"/>
+<parameter id="X"/>
+<parameter id="Y"/>
+<parameter id="Z"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="fit_3d_plane_xyz">
+<interface>
+<ic>
+<par name="X" base_type="ctrl" dimension="0"/>
+<par name="Y" base_type="ctrl" dimension="0"/>
+<par name="Z" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="Ox" base_type="ctrl" dimension="0"/>
+<par name="Oy" base_type="ctrl" dimension="0"/>
+<par name="Oz" base_type="ctrl" dimension="0"/>
+<par name="Nx" base_type="ctrl" dimension="0"/>
+<par name="Ny" base_type="ctrl" dimension="0"/>
+<par name="Nz" base_type="ctrl" dimension="0"/>
+<par name="MeanResidual" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure fits a 3D-plane into a set of 3D-points</c>
+<c>* </c>
+<c>* The procedure returns the coordinates [Ox, Oy,Oz] of</c>
+<c>* the centroid of the provided input coordinates, and</c>
+<c>* the coordinates [Nx, Ny,Nz] of the normal vector to</c>
+<c>* the fitted plane.</c>
+<c>* </c>
+<c>* WARNING: If the system of equations is under-determined</c>
+<c>* (i.e. if it has too few input coordinates in X, Y, Z),</c>
+<c>* it cannot be solved and the procedure returns empty tuples</c>
+<c>* for X, Y, and Z</c>
+<c>* </c>
+<c>* Perform some initializations</c>
+<l>Ox := []</l>
+<l>Oy := []</l>
+<l>Oz := []</l>
+<l>Nx := []</l>
+<l>Ny := []</l>
+<l>Nz := []</l>
+<l>MeanResidual := []</l>
+<c>* </c>
+<c>* Test the size of X, Y and Z, and return if necessary</c>
+<l>Size := |X|</l>
+<l>if (Size &lt; 3 or Size != |Y| or Size != |Z|)</l>
+<l>    return ()</l>
+<l>endif</l>
+<c>* </c>
+<c>* Compute the coordinates of the centroid point.</c>
+<l>tuple_mean (X, Ox)</l>
+<l>tuple_mean (Y, Oy)</l>
+<l>tuple_mean (Z, Oz)</l>
+<c>* </c>
+<c>* Setup the equation system as a matrix M and compute</c>
+<c>* its singular value decomposition. The singular vector</c>
+<c>* of M corresponding to its smallest singular value provides</c>
+<c>* the coordinates of the normal vector of the fitted plane.</c>
+<l>create_matrix (3, |X|, [X - Ox,Y - Oy,Z - Oz], MatrixID_Mt)</l>
+<l>transpose_matrix (MatrixID_Mt, MatrixID_M)</l>
+<l>svd_matrix (MatrixID_M, 'reduced', 'right', MatrixID_U, MatrixID_S, MatrixID_V)</l>
+<l>get_value_matrix (MatrixID_S, [0,1,2], [0,1,2], SingularvaluesOfM)</l>
+<l>tuple_sort_index (SingularvaluesOfM, Indices)</l>
+<c>* </c>
+<c>* Test if more than one singular value of M is (nearly) equal</c>
+<c>* to zero. This indicates that the provided 3d points are</c>
+<c>* inappropriate to fit the plane (e.g. they are nearly</c>
+<c>* collinear or reduce to a single point).</c>
+<l>if (SingularvaluesOfM[Indices[0]] &lt; 1e-9 and SingularvaluesOfM[Indices[1]] &lt; 1e-9)</l>
+<l>    return ()</l>
+<l>endif</l>
+<c>* </c>
+<c>* Get coordinates of the normal vector to the fitted plane</c>
+<l>get_value_matrix (MatrixID_V, [0,1,2], [Indices[0],Indices[0],Indices[0]], N)</l>
+<l>create_matrix (3, 1, N, MatrixID_N)</l>
+<l>Nx := N[0]</l>
+<l>Ny := N[1]</l>
+<l>Nz := N[2]</l>
+<c>* </c>
+<c>* Compute the mean residual distance between the 3d points</c>
+<c>* and the fitted plane, in order to guess the quality of</c>
+<c>* the fitted plane:</c>
+<l>mult_matrix (MatrixID_M, MatrixID_N, 'AB', MatrixID_MN)</l>
+<l>get_full_matrix (MatrixID_MN, Distances)</l>
+<l>Distances := abs(Distances)</l>
+<l>MeanResidual := sum(Distances) / Size</l>
+<c>* </c>
+<c>* Clear the matrices used in the procedure</c>
+<l>clear_matrix ([MatrixID_MN,MatrixID_N,MatrixID_V,MatrixID_S,MatrixID_U,MatrixID_M,MatrixID_Mt])</l>
+<l>return ()</l>
+</body>
+<docu id="fit_3d_plane_xyz">
+<parameters>
+<parameter id="MeanResidual"/>
+<parameter id="Nx"/>
+<parameter id="Ny"/>
+<parameter id="Nz"/>
+<parameter id="Ox"/>
+<parameter id="Oy"/>
+<parameter id="Oz"/>
+<parameter id="X"/>
+<parameter id="Y"/>
+<parameter id="Z"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="get_light_plane_pose">
+<interface>
+<ic>
+<par name="OriginX" base_type="ctrl" dimension="0"/>
+<par name="OriginY" base_type="ctrl" dimension="0"/>
+<par name="OriginZ" base_type="ctrl" dimension="0"/>
+<par name="NormalVectorX" base_type="ctrl" dimension="0"/>
+<par name="NormalVectorY" base_type="ctrl" dimension="0"/>
+<par name="NormalVectorZ" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="LightPlanePose" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure determines a lightplane pose,</c>
+<c>* e.g. a pose whose plane defined by z=0 coincides</c>
+<c>* with the physical light plane.</c>
+<c>* </c>
+<c>* Test that the vector passed at input is not null</c>
+<l>LightPlanePose := []</l>
+<l>Norm := NormalVectorX * NormalVectorX + NormalVectorY * NormalVectorY + NormalVectorZ * NormalVectorZ</l>
+<l>if (abs(Norm) &lt; 1e-8)</l>
+<l>    return ()</l>
+<l>endif</l>
+<c>* In order to compute a light-plane pose, we determine</c>
+<c>* two rotations which align the unit vector of the z-axis</c>
+<c>* to the normal vector of the light plane, when applied</c>
+<c>* successively. For example, we can compute the angles</c>
+<c>* Alpha (rotation around the x-axis) and Beta (subsequent</c>
+<c>* rotation around the y-axis) in this successive order.</c>
+<c>* (The rotation around the z-axis is arbitrarily set</c>
+<c>* to zero).</c>
+<c>* </c>
+<c>* Determine the value of the angle Alpha and rotate the</c>
+<c>* normal vector to the plane y=0. This provides the</c>
+<c>* vector N1.</c>
+<l>hom_mat3d_identity (HomMat3DIdentity)</l>
+<l>tuple_atan2 (NormalVectorY, NormalVectorZ, Alpha)</l>
+<l>hom_mat3d_rotate (HomMat3DIdentity, Alpha, 'x', 0, 0, 0, HomMat3DRotateAlpha)</l>
+<l>affine_trans_point_3d (HomMat3DRotateAlpha, NormalVectorX, NormalVectorY, NormalVectorZ, N1x, N1y, N1z)</l>
+<c>* </c>
+<c>* Determine the value of the angle Beta by using the</c>
+<c>* coordinates of N1. Note that the rotation around the</c>
+<c>* y-axis with angle Beta is carried out in the counter</c>
+<c>* trigonometric direction, therefore we apply -Beta.</c>
+<l>tuple_atan2 (N1x, N1z, Beta)</l>
+<l>hom_mat3d_rotate (HomMat3DIdentity, -Beta, 'y', 0, 0, 0, HomMat3DRotateBeta)</l>
+<c>* </c>
+<c>* Create the LightPlanePose</c>
+<l>hom_mat3d_translate (HomMat3DIdentity, -OriginX, -OriginY, -OriginZ, HomMat3DTranslate)</l>
+<l>hom_mat3d_compose (HomMat3DRotateAlpha, HomMat3DTranslate, HomMat3DTmp)</l>
+<l>hom_mat3d_compose (HomMat3DRotateBeta, HomMat3DTmp, HomMat3DWorldToLightplane)</l>
+<l>hom_mat3d_to_pose (HomMat3DWorldToLightplane, LightPlanePose)</l>
+<l>return ()</l>
+<c>* </c>
+</body>
+<docu id="get_light_plane_pose">
+<parameters>
+<parameter id="LightPlanePose"/>
+<parameter id="NormalVectorX"/>
+<parameter id="NormalVectorY"/>
+<parameter id="NormalVectorZ"/>
+<parameter id="OriginX"/>
+<parameter id="OriginY"/>
+<parameter id="OriginZ"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="Measure">
+<interface>
+<io>
+<par name="Image" base_type="iconic" dimension="0"/>
+</io>
+<ic>
+<par name="CP" base_type="ctrl" dimension="0"/>
+<par name="LP" base_type="ctrl" dimension="0"/>
+<par name="MP" base_type="ctrl" dimension="0"/>
+<par name="Ty" base_type="ctrl" dimension="0"/>
+<par name="Frame" base_type="ctrl" dimension="0"/>
+<par name="LFp3" base_type="ctrl" dimension="0"/>
+<par name="LFp4" base_type="ctrl" dimension="0"/>
+<par name="LFp5" base_type="ctrl" dimension="0"/>
+<par name="SeCp4" base_type="ctrl" dimension="0"/>
+<par name="SmCp3" base_type="ctrl" dimension="0"/>
+<par name="Step" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="X" base_type="ctrl" dimension="0"/>
+<par name="Y" base_type="ctrl" dimension="0"/>
+<par name="Z" base_type="ctrl" dimension="0"/>
+<par name="Mask" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<l>get_image_size (Image, Width, Height)</l>
+<l>* lines_facet (Image, Lines, LFp3, LFp4, LFp5, 'light')</l>
+<l>lines_gauss (Image, Lines, LFp3, LFp4, LFp5, 'light', 'false', 'none', 'false')</l>
+<l>select_contours_xld (Lines, Lines, 'contour_length', SeCp4, Width * 2, -0.5, 0.5)</l>
+<l>count_obj (Lines, Number)</l>
+<l>if (Number == 0)</l>
+<l>    return ()</l>
+<l>endif</l>
+<l>smooth_contours_xld (Lines, Lines, SmCp3)</l>
+<l>smallest_rectangle1_xld (Lines, RowMin, ColMin, RowMax, ColMax)</l>
+<l>tuple_floor (RowMin, RowMin)</l>
+<l>tuple_floor (ColMin, ColMin)</l>
+<l>tuple_ceil (RowMax, RowMax)</l>
+<l>tuple_ceil (ColMax, ColMax)</l>
+<l>for Index := 0 to |ColMin| - 1 by 1</l>
+<l>    if (ColMin[Index] &lt; 0)</l>
+<l>        ColMin[Index] := 0</l>
+<l>    else</l>
+<l>        ColMin[Index] := int(ColMin[Index] / Step) * Step</l>
+<l>    endif</l>
+<c>    </c>
+<l>    if (ColMax[Index] &gt; Width - 1 )</l>
+<l>        ColMax[Index] := Width - 1</l>
+<l>    endif</l>
+<l>endfor</l>
+<c></c>
+<l>tuple_gen_const (Width, -1, R)</l>
+<l>tuple_gen_sequence (0, Width - 1, 1, C)</l>
+<c></c>
+<l>for Index := 0 to Number - 1 by 1</l>
+<l>    select_obj (Lines, Line, Index + 1)</l>
+<l>    for IndexCol := ColMin[Index] to ColMax[Index] by Step</l>
+<l>        if (R[IndexCol] == -2)</l>
+<l>            continue</l>
+<l>        endif</l>
+<l>        intersection_line_contour_xld (Line, RowMin[Index], IndexCol, RowMax[Index], IndexCol, Row, Col, IsOverlapping)</l>
+<l>        if(IsOverlapping == true or |Row| &gt; 1)        </l>
+<l>            R[IndexCol] := -2.</l>
+<l>        elseif(Row == [])</l>
+<l>            continue</l>
+<l>        else</l>
+<l>            if (R[IndexCol] == -1.)</l>
+<l>                R[IndexCol] := Row[0]</l>
+<l>            else</l>
+<l>                R[IndexCol] := -2.</l>
+<l>            endif</l>
+<l>        endif</l>
+<l>    endfor</l>
+<l>endfor</l>
+<c></c>
+<l>tuple_greater_equal_elem (R, 0, Mask)</l>
+<l>* tuple_select_mask (R, Greatereq, R)</l>
+<l>* tuple_select_mask (C, Greatereq, C)</l>
+<c></c>
+<l>R := R + Ty</l>
+<l>image_points_to_world_plane (CP, LP, R, C, 1, X, Y)</l>
+<l>tuple_gen_const (|X|, 0, Z)</l>
+<l>pose_to_hom_mat3d (MP * Frame, HomMat3D)</l>
+<l>affine_trans_point_3d (HomMat3D, X, Y, Z, X, Y, Z)</l>
+<c></c>
+<l>return ()</l>
+</body>
+<docu id="Measure">
+<parameters>
+<parameter id="CP"/>
+<parameter id="Frame"/>
+<parameter id="Image"/>
+<parameter id="LFp3"/>
+<parameter id="LFp4"/>
+<parameter id="LFp5"/>
+<parameter id="LP"/>
+<parameter id="MP"/>
+<parameter id="Mask"/>
+<parameter id="SeCp4"/>
+<parameter id="SmCp3"/>
+<parameter id="Step"/>
+<parameter id="Ty"/>
+<parameter id="X"/>
+<parameter id="Y"/>
+<parameter id="Z"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_affine_trans_plane_3d">
+<interface>
+<ic>
+<par name="HomMat3D" base_type="ctrl" dimension="0"/>
+<par name="Pa" base_type="ctrl" dimension="0"/>
+<par name="Pb" base_type="ctrl" dimension="0"/>
+<par name="Pc" base_type="ctrl" dimension="0"/>
+<par name="Pd" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="Qa" base_type="ctrl" dimension="0"/>
+<par name="Qb" base_type="ctrl" dimension="0"/>
+<par name="Qc" base_type="ctrl" dimension="0"/>
+<par name="Qd" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<l>hom_mat3d_invert (HomMat3D, HomMat3DInvert)</l>
+<l>hom_mat3d_transpose (HomMat3DInvert, HomMat3DTranspose)</l>
+<l>projective_trans_hom_point_3d (HomMat3DTranspose, Pa, Pb, Pc, Pd, Qa, Qb, Qc, Qd)</l>
+<c></c>
+<l>return ()</l>
+</body>
+<docu id="wzq_affine_trans_plane_3d">
+<abstract lang="zh_CN">Given an input transform matrix(HomMat3D) from P Coordinate System(PCS) to Q Coordinate System(QCS) and a plane in PCS(Pa, Pb, Pc, Pd), return the plane in QCS(Qa, Qb, Qc, Qd). </abstract>
+<chapters lang="zh_CN">
+<item>wzq</item>
+<item>3D Transformations</item>
+</chapters>
+<example lang="zh_CN">read_pose('campose.dat', Pose)
+pose_to_hom_mat3d (Pose, HomMat3D)
+wzq_affine_trans_plane_3d(HomMat3D, 0, 0, 1, 0, Qa, Qb, Qc, Qd)</example>
+<keywords lang="zh_CN">
+<item>affine transformation plane 3D</item>
+</keywords>
+<library lang="zh_CN">halcon_wzq</library>
+<predecessor>
+<item>read_pose</item>
+<item>pose_to_hom_mat3d</item>
+</predecessor>
+<short lang="zh_CN">Transform plane from PCS to QCS.</short>
+<successor>
+<item>wzq_hom_mat3d_project</item>
+</successor>
+<parameters>
+<parameter id="HomMat3D">
+<description lang="zh_CN">Input transform matrix from PCS to QCS.</description>
+<mixed_type>false</mixed_type>
+<sem_type>hom_mat3d</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="Pa">
+<description lang="zh_CN">Plane in PCS Pa * x + Pb * y + Pc * z + Pd = 0</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="Pb">
+<description lang="zh_CN">Plane in PCS Pa * x + Pb * y + Pc * z + Pd = 0</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="Pc">
+<description lang="zh_CN">Plane in PCS Pa * x + Pb * y + Pc * z + Pd = 0</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="Pd">
+<description lang="zh_CN">Plane in PCS Pa * x + Pb * y + Pc * z + Pd = 0</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="Qa">
+<description lang="zh_CN">Plane in QCS Qa * x + Qb * y + Qc * z + Qd = 0</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="Qb">
+<description lang="zh_CN">Plane in QCS Qa * x + Qb * y + Qc * z + Qd = 0</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="Qc">
+<description lang="zh_CN">Plane in QCS Qa * x + Qb * y + Qc * z + Qd = 0</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="Qd">
+<description lang="zh_CN">Plane in QCS Qa * x + Qb * y + Qc * z + Qd = 0</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_align_column_lines">
+<interface>
+<io>
+<par name="Lines" base_type="iconic" dimension="0"/>
+</io>
+<oc>
+<par name="R" base_type="ctrl" dimension="0"/>
+<par name="C" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<l>count_obj (Lines, Number)</l>
+<c></c>
+<l>if (Number == 0)</l>
+<l>    return ()</l>
+<l>endif</l>
+<c></c>
+<l>smallest_rectangle1_xld(Lines, Row1, Col1, Row2, Col2)</l>
+<c></c>
+<l>tuple_floor (Row1, Row1)</l>
+<l>tuple_floor (Col1, Col1)</l>
+<l>tuple_ceil (Row2, Row2)</l>
+<l>tuple_ceil (Col2, Col2)</l>
+<c></c>
+<l>tuple_max (Col2, Width)</l>
+<c></c>
+<l>ColReady := -1.</l>
+<l>ColError := -2.</l>
+<c></c>
+<l>tuple_gen_const (Width, ColReady, Rows)</l>
+<c></c>
+<c></c>
+<c></c>
+<l>for Index := 0 to Number  - 1 by 1</l>
+<l>    select_obj (Lines, Line, Index + 1)</l>
+<l>    for IndexCol := Col1[Index] to Col2[Index] by 1</l>
+<l>        if (IndexCol &lt; 0 or IndexCol &gt; Width - 1)</l>
+<l>            continue</l>
+<l>        endif</l>
+<l>        if (Rows[IndexCol] == ColError)</l>
+<l>            continue</l>
+<l>        endif</l>
+<c>        </c>
+<l>        intersection_line_contour_xld (Line, Row1[Index] - 1, IndexCol, Row2[Index] + 1, IndexCol, Row, Col, IsOverlapping)</l>
+<l>        if(IsOverlapping == true or |Row| &gt; 1)        </l>
+<l>            Rows[IndexCol] := ColError</l>
+<l>        elseif(Row == [])</l>
+<l>            continue</l>
+<l>        else</l>
+<l>            if (Rows[IndexCol] == ColReady)</l>
+<l>                Rows[IndexCol] := Row[0]</l>
+<l>            else</l>
+<l>                Rows[IndexCol] := ColError</l>
+<l>            endif</l>
+<l>        endif</l>
+<l>    endfor</l>
+<l>endfor</l>
+<c></c>
+<l>R := []</l>
+<l>C := []</l>
+<c></c>
+<l>for Index := 0 to |Rows| - 1 by 1</l>
+<l>    if (Rows[Index] &gt; ColReady)</l>
+<l>        C := [C, Index]</l>
+<l>        R := [R, Rows[Index]]</l>
+<l>    endif</l>
+<l>endfor</l>
+<c></c>
+<c></c>
+<l>return ()</l>
+</body>
+<docu id="wzq_align_column_lines">
+<parameters>
+<parameter id="C"/>
+<parameter id="Lines"/>
+<parameter id="R"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_calc_caltab">
+<interface>
+<io>
+<par name="Image" base_type="iconic" dimension="0"/>
+</io>
+<oo>
+<par name="RegionMarks" base_type="iconic" dimension="0"/>
+<par name="RegionTab" base_type="iconic" dimension="0"/>
+</oo>
+<ic>
+<par name="CalPlateDescr" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="Row" base_type="ctrl" dimension="0"/>
+<par name="Col" base_type="ctrl" dimension="0"/>
+<par name="Pose" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<l>wzql_is_image_valid (Image)</l>
+<c></c>
+<l>wzql_is_file_exist (CalPlateDescr)</l>
+<c></c>
+<l>get_image_size (Image, Width, Height)</l>
+<l>wzql_setup_calib_data (Width, Height, CalPlateDescr, CalibDataID)</l>
+<c></c>
+<c>*To avoid memory leak. Calibration data is cleared even when exception exists.</c>
+<l>try</l>
+<l>    find_calib_object (Image, CalibDataID, 0, 0, 0, [], [])</l>
+<l>    get_calib_data_observ_points (CalibDataID, 0, 0, 0, Row, Col, Index, StartPose)</l>
+<l>    get_calib_data_observ_contours (Marks, CalibDataID, 'marks', 0, 0, 0)</l>
+<l>    get_calib_data_observ_pose (CalibDataID, 0, 0, 0, Pose)</l>
+<l>    gen_region_contour_xld (Marks, RegionMarks, 'filled')</l>
+<l>    union1 (RegionMarks, RegionMarksUnion)</l>
+<l>    shape_trans (RegionMarksUnion, RegionTrans, 'convex')</l>
+<l>    difference (RegionTrans, RegionMarks, RegionTab) </l>
+<l>catch (Exception)</l>
+<l>    clear_calib_data (CalibDataID)</l>
+<l>    throw (Exception)</l>
+<l>endtry</l>
+<l>clear_calib_data (CalibDataID)</l>
+<c></c>
+<l>return ()</l>
+</body>
+<docu id="wzq_calc_caltab">
+<abstract lang="zh_CN">wzq_calc_caltab calculates the center of the marks given by image. Both the hexagonally arranged marks and the rectangularly arranged marks can be processed.
+
+The marks' region is returned in RegionMarks.
+
+The tab's region is returned in RegionTab.
+
+A image contains of calibration marks should be designated in Image.
+
+The calibration description file extended by *.cpd and *.descr is assumed.
+
+The output of the center of the marks is saved into Row and Col.</abstract>
+<chapters lang="zh_CN">
+<item>wzq</item>
+<item>Calibration</item>
+</chapters>
+<library lang="zh_CN">halcon_wzq</library>
+<short lang="zh_CN">Calculate the center of the marks given by image. Regions for marks and tab are returned.</short>
+<parameters>
+<parameter id="CalPlateDescr">
+<default_value>'calplate.cpd'</default_value>
+<description lang="zh_CN">Calibration plate description file.</description>
+<file_ext>
+<item>cpd</item>
+</file_ext>
+<file_ext_descr lang="zh_CN">
+<item>Calibration Plate Description</item>
+</file_ext_descr>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>filename.read</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<values>
+<item>'calplate.cpd'</item>
+<item>'caltab.descr'</item>
+</values>
+</parameter>
+<parameter id="Col">
+<description lang="zh_CN">The column(x) coordinates for the mark center.</description>
+<mixed_type>false</mixed_type>
+<multivalue>true</multivalue>
+<sem_type>coordinates.x</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="Image">
+<description lang="zh_CN">Input image.</description>
+<multichannel>false</multichannel>
+<multivalue>false</multivalue>
+<sem_type>image</sem_type>
+<type_list>
+<item>byte</item>
+</type_list>
+</parameter>
+<parameter id="Pose">
+<description lang="zh_CN">Pose of the calibration image.</description>
+<mixed_type>false</mixed_type>
+<multivalue>true</multivalue>
+<sem_type>pose</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="RegionMarks">
+<description lang="zh_CN">The marks' region.</description>
+<multivalue>true</multivalue>
+<sem_type>region</sem_type>
+</parameter>
+<parameter id="RegionTab">
+<description lang="zh_CN">The tab's region.</description>
+<multivalue>false</multivalue>
+<sem_type>region</sem_type>
+</parameter>
+<parameter id="Row">
+<description lang="zh_CN">The row(y) coordinates for the mark center.</description>
+<mixed_type>false</mixed_type>
+<multivalue>true</multivalue>
+<sem_type>coordinates.y</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_calc_caltab2">
+<interface>
+<io>
+<par name="Image" base_type="iconic" dimension="0"/>
+</io>
+<oo>
+<par name="RegionMarks" base_type="iconic" dimension="0"/>
+<par name="RegionTab" base_type="iconic" dimension="0"/>
+</oo>
+<ic>
+<par name="CalibDataID" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="Row" base_type="ctrl" dimension="0"/>
+<par name="Col" base_type="ctrl" dimension="0"/>
+<par name="Pose" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<l>wzql_is_image_valid (Image)</l>
+<c></c>
+<l>find_calib_object (Image, CalibDataID, 0, 0, 0, [], [])</l>
+<l>get_calib_data_observ_points (CalibDataID, 0, 0, 0, Row, Col, Index, StartPose)</l>
+<l>get_calib_data_observ_contours (Marks, CalibDataID, 'marks', 0, 0, 0)</l>
+<l>get_calib_data_observ_pose (CalibDataID, 0, 0, 0, Pose)</l>
+<l>gen_region_contour_xld (Marks, RegionMarks, 'filled')</l>
+<l>union1 (RegionMarks, RegionMarksUnion)</l>
+<l>shape_trans (RegionMarksUnion, RegionTrans, 'convex')</l>
+<l>difference (RegionTrans, RegionMarks, RegionTab)</l>
+<c></c>
+<l>return ()</l>
+</body>
+<docu id="wzq_calc_caltab2">
+<abstract lang="zh_CN">wzq_calc_caltab2 calculates the center of the marks given by image. Both the hexagonally arranged marks and the rectangularly arranged marks can be processed. This procedure does not clear CalibDataID.
+
+The marks' region is returned in RegionMarks.
+
+The tab's region is returned in RegionTab.
+
+A image contains of calibration marks should be designated in Image.
+
+The calibration data ID is passed by CalibDataID.
+
+The output of the center of the marks is saved into Row and Col.</abstract>
+<chapters lang="zh_CN">
+<item>wzq</item>
+<item>Calibration</item>
+</chapters>
+<library lang="zh_CN">halcon_wzq</library>
+<short lang="zh_CN">Calculate the center of the marks given by image. Regions for marks and tab are returned.</short>
+<parameters>
+<parameter id="CalibDataID">
+<default_value>CalibDataID</default_value>
+<description lang="zh_CN">The calibration data ID.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>calib_data</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="Col">
+<description lang="zh_CN">The column(x) coordinates for the mark center.</description>
+<mixed_type>false</mixed_type>
+<multivalue>true</multivalue>
+<sem_type>coordinates.x</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="Image">
+<description lang="zh_CN">Input image.</description>
+<multichannel>false</multichannel>
+<multivalue>false</multivalue>
+<sem_type>image</sem_type>
+<type_list>
+<item>byte</item>
+</type_list>
+</parameter>
+<parameter id="Pose">
+<description lang="zh_CN">Pose of the calibration image.</description>
+<mixed_type>false</mixed_type>
+<multivalue>true</multivalue>
+<sem_type>pose</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="RegionMarks">
+<description lang="zh_CN">The marks' region.</description>
+<multivalue>true</multivalue>
+<sem_type>region</sem_type>
+</parameter>
+<parameter id="RegionTab">
+<description lang="zh_CN">The tab's region.</description>
+<multivalue>false</multivalue>
+<sem_type>region</sem_type>
+</parameter>
+<parameter id="Row">
+<description lang="zh_CN">The row(y) coordinates for the mark center.</description>
+<mixed_type>false</mixed_type>
+<multivalue>true</multivalue>
+<sem_type>coordinates.y</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_calc_caltab_exposure">
+<interface>
+<ic>
+<par name="AcqHandle" base_type="ctrl" dimension="0"/>
+<par name="CalPlateDescr" base_type="ctrl" dimension="0"/>
+<par name="MeanObj" base_type="ctrl" dimension="0"/>
+<par name="ThresholdObj" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="ExposureTime" base_type="ctrl" dimension="0"/>
+<par name="Mean" base_type="ctrl" dimension="0"/>
+<par name="Deviation" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<l>wzql_is_file_exist (CalPlateDescr)</l>
+<c></c>
+<l>if (MeanObj &lt;= 0)</l>
+<l>    throw ('Wrong value of control parameter MeanObj')</l>
+<l>endif</l>
+<c></c>
+<l>if (ThresholdObj &lt; 0 or MeanObj - ThresholdObj &lt; 0 or MeanObj + ThresholdObj &gt; 255)</l>
+<l>    throw ('Wrong value of control parameter ThresholdObj')</l>
+<l>endif</l>
+<c></c>
+<l>dev_update_window ('off')</l>
+<c></c>
+<l>MeanLow := MeanObj - ThresholdObj</l>
+<l>MeanHig := MeanObj + ThresholdObj</l>
+<c></c>
+<l>*get_framegrabber_param (AcqHandle, 'ExposureTimeAbs', ExposureTime)</l>
+<l>get_framegrabber_param (AcqHandle, 'horizontal_resolution', Width)</l>
+<l>get_framegrabber_param (AcqHandle, 'vertical_resolution', Height)</l>
+<c></c>
+<l>wzql_setup_calib_data (Width, Height, CalPlateDescr, CalibDataID)</l>
+<c></c>
+<l>dev_open_window_fit_size (0, 0, Width, Height, 1024, 768, WindowID)</l>
+<l>* grab_image (Image, AcqHandle)</l>
+<c>* wzq_calc_caltab_region (Image, Region, 0.008, 0.0000099, 0.0000099, 'Caltab.descr')</c>
+<l>* wzq_calc_caltab (Image, RegionMarks, Region, CalPlateDescr, Row, Col, Pose)</l>
+<l>* intensity (Region, Image, Mean, Deviation)</l>
+<l>while (true)</l>
+<l>    try</l>
+<l>        grab_image_async (Image, AcqHandle, -1)</l>
+<l>        dev_display (Image)</l>
+<l>        wzq_calc_caltab2 (Image, RegionMarks, RegionTab, CalibDataID, Row, Col, Pose)</l>
+<l>        intensity (RegionTab, Image, Mean, Deviation)</l>
+<l>    catch (Exception)    </l>
+<l>        continue</l>
+<l>    endtry</l>
+<c></c>
+<l>    dev_display (RegionMarks)</l>
+<l>    if (Mean &gt; MeanLow and Mean &lt; MeanHig)</l>
+<l>        wzq_disp_continue_message (WindowID, 'black', 'true')</l>
+<l>        break</l>
+<l>    endif</l>
+<c>    </c>
+<l>    ExposureTime := ExposureTime * 1. / Mean * MeanObj</l>
+<l>    set_framegrabber_param (AcqHandle, 'ExposureTimeAbs', ExposureTime) </l>
+<l>endwhile</l>
+<c></c>
+<c></c>
+<l>* Intensity := [Mean]</l>
+<l>* ExposureT := [ExposureTime]</l>
+<c></c>
+<l>* if (Mean &lt; MeanLow)</l>
+<l>*     while (true)</l>
+<l>*         ExposureTime := ExposureTime * 2</l>
+<l>*         set_framegrabber_param (AcqHandle, 'ExposureTimeAbs', ExposureTime)</l>
+<l>*         grab_image_async (Image, AcqHandle, -1)</l>
+<l>*         intensity (Region, Image, Mean, Deviation)</l>
+<l>*         wzq_calc_caltab_intensity (Image, CalPlateDescr, MeanMarks, DeviationMarks, Mean, Deviation)</l>
+<c></c>
+<l>*         Intensity := [Mean, Intensity]</l>
+<l>*         ExposureT := [ExposureTime, ExposureT]</l>
+<l>*         if (Mean &gt;= MeanLow)</l>
+<l>*             Temp := Intensity[0]</l>
+<l>*             Intensity[0] := Intensity[1]</l>
+<l>*             Intensity[1] := Temp</l>
+<l>*             Temp := ExposureT[0]</l>
+<l>*             ExposureT[0] := ExposureT[1]</l>
+<l>*             ExposureT[1] := Temp</l>
+<l>*             break</l>
+<l>*         endif</l>
+<l>*     endwhile</l>
+<l>* elseif (Mean &gt; MeanHig)</l>
+<l>*     while (true)</l>
+<l>*         ExposureTime := ExposureTime / 2.</l>
+<l>*         set_framegrabber_param (AcqHandle, 'ExposureTimeAbs', ExposureTime)</l>
+<l>*         grab_image (Image, AcqHandle)</l>
+<l>*         intensity (Region, Image, Mean, Deviation)</l>
+<l>*         Intensity := [Mean, Intensity]</l>
+<l>*         ExposureT := [ExposureTime, ExposureT]</l>
+<l>*         if (Mean &lt;= MeanHig)</l>
+<l>*             break</l>
+<l>*         endif</l>
+<l>*     endwhile</l>
+<l>* else</l>
+<l>*     return()</l>
+<l>* endif</l>
+<c></c>
+<c></c>
+<l as_id="image_acquisition" as_name="Image Acquisition 01" as_grp="[2,2]" as_ord="1">* while (Mean &lt; MeanLow or Mean &gt; MeanHig)</l>
+<l>*     ExposureTime := (ExposureT[0] + ExposureT[1]) / 2.</l>
+<l>*     set_framegrabber_param (AcqHandle, 'ExposureTimeAbs', ExposureTime)</l>
+<l as_id="image_acquisition" as_name="Image Acquisition 01" as_grp="[2,3]" as_ord="1">*     grab_image (Image, AcqHandle)</l>
+<l>*     intensity (Region, Image, Mean, Deviation)</l>
+<l>*     if (Mean &gt; MeanObj)</l>
+<l>*         Intensity[1] := Mean</l>
+<l>*         ExposureT[1] := ExposureTime</l>
+<l>*     else</l>
+<l>*         Intensity[0] := Mean</l>
+<l>*         ExposureT[0] := ExposureTime</l>
+<l>*     endif</l>
+<l as_id="image_acquisition" as_name="Image Acquisition 01" as_grp="[3,1]" as_ord="1">* endwhile</l>
+<l>clear_calib_data (CalibDataID)</l>
+<c></c>
+<l>return ()</l>
+</body>
+<docu id="wzq_calc_caltab_exposure">
+<abstract lang="zh_CN">Calculate the exposure time for calibrate plate automatically.</abstract>
+<chapters lang="zh_CN">
+<item>wzq</item>
+<item>Calibration</item>
+</chapters>
+<library lang="zh_CN">halcon_wzq</library>
+<short lang="zh_CN">Calculate the exposure time for calibrate plate automatically.</short>
+<parameters>
+<parameter id="AcqHandle">
+<default_value>AcqHandle</default_value>
+<description lang="zh_CN">Image acquisition handle.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>framegrabber</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="CalPlateDescr">
+<default_type>string</default_type>
+<default_value>'calplate.cpd'</default_value>
+<description lang="zh_CN">Calibration plate description file.</description>
+<file_ext>
+<item>cpd</item>
+</file_ext>
+<file_ext_descr lang="zh_CN">
+<item>Calibration Plate Description</item>
+</file_ext_descr>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>filename.read</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<values>
+<item>'calplate.cpd'</item>
+<item>'caltab.descr'</item>
+</values>
+</parameter>
+<parameter id="Deviation">
+<description lang="zh_CN">Result of deviation gray value.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="ExposureTime">
+<description lang="zh_CN">Exposure time to be returned.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="Mean">
+<description lang="zh_CN">Result of mean gray value.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="MeanObj">
+<description lang="zh_CN">Mean gray value to be approximated.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="ThresholdObj">
+<description lang="zh_CN">Threshold of mean gray value.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_calibrate_camera">
+<interface>
+<io>
+<par name="CalPlate" base_type="iconic" dimension="0"/>
+</io>
+<oo>
+<par name="Regions" base_type="iconic" dimension="0"/>
+</oo>
+<ic>
+<par name="CalPlateDescr" base_type="ctrl" dimension="0"/>
+<par name="CameraType" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="Row" base_type="ctrl" dimension="0"/>
+<par name="Column" base_type="ctrl" dimension="0"/>
+<par name="Index" base_type="ctrl" dimension="0"/>
+<par name="CameraParam" base_type="ctrl" dimension="0"/>
+<par name="Pose" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<l>StartParameters := []</l>
+<l>get_image_size (CalPlate, Width, Height)</l>
+<c></c>
+<l>file_exists (CalPlateDescr, FileExists)</l>
+<c></c>
+<l>if (FileExists == 0)</l>
+<l>    throw ('CalPlateDescr not found.')</l>
+<l>endif</l>
+<c></c>
+<l>if (CameraType == 'area_scan_tilt_polynomial')</l>
+<l>    StartParameters := [0.008,0,0,0,0,0,0,0,5.5e-006,5.5e-006,Width / 2,Height / 2,Width,Height]</l>
+<l>elseif (CameraType == 'area_scan_division')</l>
+<l>    StartParameters := [0.008,0,5.5e-006,5.5e-006,Width / 2,Height / 2,Width,Height]</l>
+<l>elseif (CameraType == 'area_scan_polynomial')</l>
+<l>    StartParameters := [0.008,0,0,0,0,0,5.5e-006,5.5e-006,Width / 2,Height / 2,Width,Height]</l>
+<l>elseif (CameraType == 'area_scan_tilt_division')</l>
+<l>    StartParameters := [0.008,0,0,0,5.5e-006,5.5e-006,Width / 2,Height / 2,Width,Height]</l>
+<l>else</l>
+<l>    throw ('Wrong camera type.')</l>
+<l>endif</l>
+<c></c>
+<l>create_calib_data ('calibration_object', 1, 1, CalibHandle)</l>
+<l>set_calib_data_cam_param (CalibHandle, 0, CameraType, StartParameters)</l>
+<l>set_calib_data_calib_object (CalibHandle, 0, CalPlateDescr)</l>
+<c></c>
+<l>find_calib_object (CalPlate, CalibHandle, 0, 0, 0, 'sigma', 1)</l>
+<c></c>
+<l>calibrate_cameras (CalibHandle, TmpCtrl_Errors)</l>
+<c></c>
+<l>get_calib_data (CalibHandle, 'camera', 0, 'params', CameraParam)</l>
+<l>get_calib_data (CalibHandle, 'camera', 0, 'pose', Pose)</l>
+<l>get_calib_data_observ_points (CalibHandle, 0, 0, 0, Row, Column, Index, poseUncalibrated)</l>
+<l>get_calib_data_observ_contours (Contours, CalibHandle, 'marks', 0, 0, 0)</l>
+<c></c>
+<l>gen_empty_obj (Regions)</l>
+<l>count_obj (Contours, Number)</l>
+<l>for Ind := 1 to Number by 1</l>
+<l>    select_obj (Contours, ObjectSelected, Ind)</l>
+<l>    gen_region_contour_xld (ObjectSelected, Region, 'filled')</l>
+<l>    concat_obj (Regions, Region, Regions)</l>
+<l>endfor</l>
+<c></c>
+<l>clear_calib_data (CalibHandle)</l>
+<l>return ()</l>
+</body>
+<docu id="wzq_calibrate_camera">
+<parameters>
+<parameter id="CalPlate">
+<multichannel>false</multichannel>
+<multivalue>false</multivalue>
+<sem_type>image</sem_type>
+<type_list>
+<item>byte</item>
+</type_list>
+</parameter>
+<parameter id="CalPlateDescr">
+<default_type>string</default_type>
+<default_value>'calplate.cpd'</default_value>
+<description lang="zh_CN">File name of the calibration plate description.</description>
+<file_ext>
+<item>cpd</item>
+</file_ext>
+<file_ext_descr lang="zh_CN">
+<item>Calibration Plate Description</item>
+</file_ext_descr>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>filename.read</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+<parameter id="CameraParam">
+<default_type>real</default_type>
+<mixed_type>optional</mixed_type>
+<multivalue>true</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="CameraType">
+<default_type>string</default_type>
+<default_value>'area_scan_division'</default_value>
+<mixed_type>false</mixed_type>
+<sem_type>string</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<values>
+<item>'area_scan_tilt_division'</item>
+<item>'area_scan_polynomial'</item>
+<item>'area_scan_tilt_polynomial'</item>
+</values>
+</parameter>
+<parameter id="Column">
+<default_type>real</default_type>
+<mixed_type>false</mixed_type>
+<multivalue>true</multivalue>
+<sem_type>coordinates.x</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="Index">
+<default_type>integer</default_type>
+<mixed_type>false</mixed_type>
+<sem_type>index</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="Pose">
+<default_type>real</default_type>
+<mixed_type>optional</mixed_type>
+<multivalue>true</multivalue>
+<sem_type>pose</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="Regions">
+<multivalue>optional</multivalue>
+<sem_type>region</sem_type>
+</parameter>
+<parameter id="Row">
+<default_type>real</default_type>
+<mixed_type>false</mixed_type>
+<multivalue>true</multivalue>
+<sem_type>coordinates.y</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_create_caltab">
+<interface>
+<oo>
+<par name="CalPlate" base_type="iconic" dimension="0"/>
+</oo>
+<ic>
+<par name="NumRows" base_type="ctrl" dimension="0"/>
+<par name="NumCols" base_type="ctrl" dimension="0"/>
+<par name="Radius" base_type="ctrl" dimension="0"/>
+<par name="Polarity" base_type="ctrl" dimension="0"/>
+<par name="CalPlateDescr" base_type="ctrl" dimension="0"/>
+<par name="CalPlateTifFile" base_type="ctrl" dimension="0"/>
+<par name="Ratio" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="RowOut" base_type="ctrl" dimension="0"/>
+<par name="ColOut" base_type="ctrl" dimension="0"/>
+<par name="RowIn" base_type="ctrl" dimension="0"/>
+<par name="ColIn" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* Initialize PI</c>
+<l>PI := asin(1.0) * 2.0</l>
+<c></c>
+<c>* Initialize finder patterns</c>
+<l>TPR := {[0,  0, -1, -1, 1,  1], [ 0, -1, 0,  1], [0,  0, 0, 1], [0,  0, 0,  1], [ 0, -1, -1,  1]}</l>
+<l>TPC := {[0, -2, -1,  1, 1, -1], [-2, -1, 2, -1], [0, -2, 2, 1], [0, -2, 2, -1], [-2, -1,  1, -1]}</l>
+<c></c>
+<c>* Validate input control parameters.</c>
+<l>if (NumRows &lt; 3)</l>
+<l>    throw ('Wrong value of control parameter NumRows.')</l>
+<l>endif</l>
+<c></c>
+<l>if (NumCols &lt; 3)</l>
+<l>    throw ('Wrong value of control parameter NumCols.')</l>
+<l>endif</l>
+<c></c>
+<l>if (Radius &lt;= 2.0)</l>
+<l>    throw ('Radius must be larger than 2.')</l>
+<l>endif</l>
+<c></c>
+<l>if (Ratio &lt;= 0)</l>
+<l>    throw ('Wrong value of control parameter Ratio.')</l>
+<l>endif</l>
+<c></c>
+<c>* Initialize Diameter</c>
+<l>Diameter := Radius * 2.0</l>
+<c></c>
+<c>* Initialize the interval between rows and columns, rounded to int</c>
+<l>WShift := round(Diameter)</l>
+<l>HShift := round(Diameter * sqrt(3.0))</l>
+<c></c>
+<c>* Image height and width in pixal</c>
+<l>H := HShift * (NumRows - 1) + HShift * 2</l>
+<l>W := WShift * 2 * (NumCols - 1) + WShift * 5</l>
+<c></c>
+<c>* Initialize background and forgound color</c>
+<l>if (Polarity == 'light_on_dark')</l>
+<l>    ColorBg := 0</l>
+<l>    ColorFg := 255</l>
+<l>elseif (Polarity == 'dark_on_light')</l>
+<l>    ColorBg := 255</l>
+<l>    ColorFg := 0</l>
+<l>else</l>
+<l>    throw ('Wrong value of control parameter Polarity.')</l>
+<l>endif</l>
+<c></c>
+<c>* Prepare finder patterns index</c>
+<l>RM := NumRows / 2</l>
+<l>RQ := RM - (RM - 2) / 2</l>
+<c></c>
+<l>CM := NumCols / 2</l>
+<l>CQ := CM - (CM - 2) / 2</l>
+<c></c>
+<l>FinderRow := []</l>
+<l>FinderCol := []</l>
+<c></c>
+<l>if (NumRows &lt; 11 and NumCols &lt; 11)</l>
+<l>    FinderRow := [RM]</l>
+<l>    FinderCol := [CM]</l>
+<l>elseif (NumRows &lt; 11)</l>
+<l>    FinderRow := [RM, RM, RM]</l>
+<l>    FinderCol := [CM, CM - CQ, CM + CQ]</l>
+<l>elseif (NumCols &lt; 11)</l>
+<l>    FinderRow := [RM, RM - RQ, RM + RQ]</l>
+<l>    FinderCol := [CM, CM, CM]</l>
+<l>else</l>
+<l>    FinderRow := [RM, RM - RQ, RM - RQ, RM + RQ, RM + RQ]</l>
+<l>    FinderCol := [CM, CM - CQ, CM + CQ, CM - CQ, CM + CQ]</l>
+<l>endif</l>
+<c></c>
+<c>* Generate image for drawing</c>
+<l>gen_image_const (CalPlate, 'byte', W, H)</l>
+<l>get_domain (CalPlate, Domain)</l>
+<l>paint_region (Domain, CalPlate, CalPlate, ColorBg, 'fill')</l>
+<c></c>
+<l>Rows := []</l>
+<l>Cols := []</l>
+<c></c>
+<l>for Index := 0 to NumRows - 1 by 1 </l>
+<l>    Rows := [Rows, HShift + HShift * Index]</l>
+<l>endfor</l>
+<c></c>
+<l>for Index := 0 to NumCols - 1 by 1</l>
+<l>    Cols := [Cols, WShift * 2 + WShift * 2 * Index]</l>
+<l>endfor</l>
+<c></c>
+<l>R := []</l>
+<l>C := []</l>
+<l>for Index := 0 to NumRows - 1 by 1</l>
+<l>    tuple_gen_const (NumCols, Rows[Index], temp)</l>
+<l>    R := [R, temp]</l>
+<l>    if (Index % 2 == 0)</l>
+<l>        C := [C, Cols + WShift]</l>
+<l>    else</l>
+<l>        C := [C, Cols]</l>
+<l>    endif</l>
+<l>endfor</l>
+<c></c>
+<l>tuple_gen_const (|R|, Radius, Rad)</l>
+<l>gen_circle_contour_xld (Circles, R, C, Rad, 0, PI * 2.0, 'positive', 0.1)</l>
+<l>paint_xld (Circles, CalPlate, CalPlate, ColorFg)</l>
+<l>RowOut := R</l>
+<l>ColOut := C</l>
+<c></c>
+<l>RI := []</l>
+<l>CI := []</l>
+<l>for Index := 0 to |FinderRow| - 1 by 1</l>
+<l>    pos := FinderRow[Index] * NumCols + FinderCol[Index]</l>
+<c></c>
+<l>    posR := TPR.at(Index)</l>
+<l>    posC := TPC.at(Index)</l>
+<l>    for i := 0 to |posR| - 1 by 1</l>
+<l>        RI := [RI, R[pos] + posR[i] * HShift]</l>
+<l>        CI := [CI, C[pos] + posC[i] * WShift]</l>
+<l>    endfor</l>
+<l>endfor</l>
+<c></c>
+<l>tuple_gen_const (|RI|, Radius / 2.0, Rad)</l>
+<l>gen_circle_contour_xld (CirclesIn, RI, CI, Rad, 0, PI * 2.0, 'positive', 0.1)</l>
+<l>paint_xld (CirclesIn, CalPlate, CalPlate, ColorBg)</l>
+<l>RowIn := RI</l>
+<l>ColIn := CI</l>
+<c></c>
+<l>if (CalPlateTifFile != '')</l>
+<l>    write_image (CalPlate, 'tiff', 0, CalPlateTifFile)</l>
+<l>endif</l>
+<c></c>
+<l>if (CalPlateDescr == '')</l>
+<l>    return ()</l>
+<l>endif</l>
+<c></c>
+<l>R := (R - RI[0]) * Ratio</l>
+<l>C := (C - CI[0]) * Ratio</l>
+<c></c>
+<l>MinX := -CI[0] * Ratio</l>
+<l>MinY := -RI[0] * Ratio</l>
+<l>MaxX := (W - CI[0]) * Ratio</l>
+<l>MaxY := (H - RI[0]) * Ratio</l>
+<c></c>
+<l>if (Polarity == 'light_on_dark')</l>
+<l>    P := 'light'</l>
+<l>else</l>
+<l>    P := 'dark'</l>
+<l>endif</l>
+<c></c>
+<l>get_system_time (MSecond, Second, Minute, Hour, Day, YDay, Month, Year)</l>
+<l>DayString := Year$'4d' + '/' + Month$'02d' + '/' + Day$'02d'</l>
+<l>TimeString := Hour$'02d' + ':' + Minute$'02d' + ':' + Second$'02d'</l>
+<c></c>
+<l>Descr := ''</l>
+<l>Descr := Descr + '# Plate Description Version 3\n'</l>
+<l>Descr := Descr + '# HALCON Version 12.0 --  ' + DayString + ' ' + TimeString + '\n'</l>
+<l>Descr := Descr + '# Description of the standard calibration plate\n'</l>
+<l>Descr := Descr + '# used for the camera calibration in HALCON\n'</l>
+<l>Descr := Descr + '# (generated by wzq_create_caltab)\n'</l>
+<l>Descr := Descr + '# NumRows:\t' + NumRows + '\n'</l>
+<l>Descr := Descr + '# NumCols:\t' + NumCols + '\n'</l>
+<l>Descr := Descr + '# Diameter:\t' + Diameter + ' pixels\n'</l>
+<l>Descr := Descr + '# Ratio:  \t' + Ratio + '\n'</l>
+<l>Descr := Descr + '# Output image width:\t' + W + ' pixels\n'</l>
+<l>Descr := Descr + '# Output image height:\t' + H + ' pixels\n'</l>
+<l>Descr := Descr + '#\n'</l>
+<l>Descr := Descr + '#\n'</l>
+<l>Descr := Descr + '\n'</l>
+<l>Descr := Descr + '# ' + NumRows +' rows x ' + NumCols + ' columns\n'</l>
+<l>Descr := Descr + '# Width, height of calibration plate [meter]: ' + (W * Ratio)$'.7f' + ', ' + (H * Ratio)$'.7f' + '\n'</l>
+<l>Descr := Descr + '# Distance between mark centers [meter]: ' + (WShift * Ratio * 2)$'.7f' + '\n'</l>
+<l>Descr := Descr + '\n'</l>
+<l>Descr := Descr + '# Number of marks in y-dimension (rows)\n'</l>
+<l>Descr := Descr + 'r ' + NumRows + '\n'</l>
+<l>Descr := Descr + '\n'</l>
+<l>Descr := Descr + '# Number of marks in x-dimension (columns)\n'</l>
+<l>Descr := Descr + 'c ' + NumCols + '\n'</l>
+<l>Descr := Descr + '\n'</l>
+<l>Descr := Descr + '# offset of coordinate system in z-dimension [meter] (optional):\n'</l>
+<l>Descr := Descr + 'z ' + 0 + '\n'</l>
+<l>Descr := Descr + '\n'</l>
+<l>Descr := Descr + '# rim of the calibration plate (min x, max y, max x, min y) [meter]:\n'</l>
+<l>Descr := Descr + 'o ' + MinX$'-18.7f' + ' ' + MaxY$'-18.7f' + ' ' + MaxX$'-18.7f' + ' ' + MinY$'-18.7f' + '\n'</l>
+<l>Descr := Descr + '\n'</l>
+<l>Descr := Descr + '# polarity of the marks (light or dark):\n'</l>
+<l>Descr := Descr + 'p ' + P + '\n'</l>
+<l>Descr := Descr + '\n'</l>
+<l>Descr := Descr + '# number of finder pattern marks:\n'</l>
+<l>Descr := Descr + 'f ' + |FinderRow| + '\n'</l>
+<l>Descr := Descr + '\n'</l>
+<l>Descr := Descr + '# position of the finder patterns (central mark):  x y [index]\n'</l>
+<l>Finder:= FinderCol + ' ' + FinderRow + '\n'</l>
+<l>for Index := 0 to |Finder| - 1 by 1</l>
+<l>    Descr := Descr + Finder[Index]</l>
+<l>endfor</l>
+<l>Descr := Descr + '\n'</l>
+<l>Descr := Descr + '# calibration marks:  x y radius [meter]\n'</l>
+<c></c>
+<l>for IndexR := 0 to NumRows - 1 by 1</l>
+<l>    Descr := Descr + '\n'</l>
+<l>    Descr := Descr + '# calibration marks at y = ' + (R[IndexR * NumCols])$'-18.7f' + ' m\n'</l>
+<c>    </c>
+<l>    for IndexC := 0 to NumCols - 1 by 1</l>
+<l>        Index := IndexR * NumCols + IndexC</l>
+<l>        Descr := Descr + (C[Index])$'-18.7f' + ' ' + (R[Index])$'-18.7f' + ' ' + (Radius * Ratio)$'-18.7f' + '\n'</l>
+<l>    endfor</l>
+<l>endfor</l>
+<c></c>
+<l>open_file (CalPlateDescr, 'output', FileHandle)</l>
+<l>fwrite_string (FileHandle, Descr)</l>
+<l>close_file (FileHandle)</l>
+<c></c>
+<l>return ()</l>
+</body>
+<docu id="wzq_create_caltab">
+<abstract lang="zh_CN">wzq_create_caltab creates the description file of a standard HALCON calibration plate with hexagonally arranged marks. This calibration plate contains NumCols times NumRows circular marks. These marks are arranged in a hexagonal lattice such that each mark (except the ones at the border) has six equidistant neighbors.
+
+The radius of the marks is given by the parameter Radius in pixel. The distance between the centers of horizontally neighboring calibration marks is rounded to Diameter * 2. The distance between neighboring rows of calibration marks is rounded  to Diameter * sqrt(3).
+
+The coordinate system of the calibration plate is located at the center of the central mark. 
+The image origin is located at the center of the first pixal.
+
+Depending on Polarity the marks are either light on dark background (for 'light_on_dark', which is the default) or dark on light background (for 'dark_on_light').
+
+The file CalPlateDescr contains the calibration plate description. The default HALCON file extension for the description of a calibration plate with hexagonally arranged marks is 'cpd'.
+
+The file CalPlateTifFile contains the corresponding TIF image of the calibration plate, which can be used to print the calibration plate.
+
+Ratio is the size of physical pixal(the displayer) in millimeter.</abstract>
+<chapters lang="zh_CN">
+<item>wzq</item>
+<item>Calibration</item>
+</chapters>
+<library lang="zh_CN">halcon_wzq</library>
+<short lang="zh_CN">Generate a calibration plate description file and a corresponding TIF file for a calibration plate with hexagonally arranged marks.</short>
+<parameters>
+<parameter id="CalPlate">
+<description lang="zh_CN">Created image with hexagonally arranged marks.</description>
+<multichannel>false</multichannel>
+<multivalue>false</multivalue>
+<sem_type>image</sem_type>
+<type_list>
+<item>byte</item>
+</type_list>
+</parameter>
+<parameter id="CalPlateDescr">
+<default_type>string</default_type>
+<default_value>''</default_value>
+<description lang="zh_CN">File name of the calibration plate description.
+Use '' to skip saving this file.</description>
+<file_ext>
+<item>cpd</item>
+</file_ext>
+<file_ext_descr lang="zh_CN">
+<item>Calibration Plate Description</item>
+</file_ext_descr>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>filename.write</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<values>
+<item>'calplate.cpd'</item>
+<item>''</item>
+</values>
+</parameter>
+<parameter id="CalPlateTifFile">
+<default_type>string</default_type>
+<default_value>''</default_value>
+<description lang="zh_CN">File name of the TIF file.
+Use '' to skip saving this file.</description>
+<file_ext>
+<item>tif</item>
+</file_ext>
+<file_ext_descr lang="zh_CN">
+<item>Tagged Image File</item>
+</file_ext_descr>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>filename.write</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<values>
+<item>'calplate.tif'</item>
+<item>''</item>
+</values>
+</parameter>
+<parameter id="ColIn">
+<default_type>integer</default_type>
+<description lang="zh_CN">Center coordinates of inside marks.
+The first element is origin.</description>
+<multivalue>true</multivalue>
+<sem_type>coordinates.x</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="ColOut">
+<default_type>integer</default_type>
+<description lang="zh_CN">Center coordinates of marks.</description>
+<multivalue>true</multivalue>
+<sem_type>coordinates.x</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="NumCols">
+<default_type>integer</default_type>
+<default_value>23</default_value>
+<description lang="zh_CN">Number of Columns.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>number</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="NumRows">
+<default_type>integer</default_type>
+<default_value>23</default_value>
+<description lang="zh_CN">Number of rows.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>number</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="Polarity">
+<default_type>string</default_type>
+<default_value>'light_on_dark'</default_value>
+<description lang="zh_CN">Polarity of the marks.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>string</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<value_list>
+<item>'light_on_dark'</item>
+<item>'dark_on_light'</item>
+</value_list>
+</parameter>
+<parameter id="Radius">
+<default_type>real</default_type>
+<default_value>20</default_value>
+<description lang="zh_CN">Radius of the marks [pixal]. 
+Must be larger than 2.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>circle.radius</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="Ratio">
+<default_type>real</default_type>
+<default_value>1.</default_value>
+<description lang="zh_CN">The size of physical pixal(the displayer) in meter.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="RowIn">
+<default_type>integer</default_type>
+<description lang="zh_CN">Center coordinates of inside marks.
+The first element is origin.</description>
+<multivalue>true</multivalue>
+<sem_type>coordinates.y</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="RowOut">
+<default_type>integer</default_type>
+<description lang="zh_CN">Center coordinates of marks.</description>
+<multivalue>true</multivalue>
+<sem_type>coordinates.y</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_delete_file">
+<interface>
+<ic>
+<par name="FileName" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* Match *.abc and extract .abc</c>
+<l>tuple_regexp_match (FileName, '^\\*(\\.\\w+)$', ext)</l>
+<c></c>
+<l>if (ext != '')</l>
+<l>    list_files ('', 'files', Files)</l>
+<l>    tuple_regexp_select (Files, ext + '$', Selection)</l>
+<l>    for Index := 1 to |Selection| by 1</l>
+<l>        delete_file (Selection[Index - 1])</l>
+<l>    endfor</l>
+<l>else</l>
+<l>    file_exists (FileName, FileExists)</l>
+<l>    if (FileExists)</l>
+<l>        delete_file (FileName)</l>
+<l>    endif</l>
+<l>endif</l>
+<c></c>
+<l>return ()</l>
+</body>
+<docu id="wzq_delete_file">
+<abstract lang="zh_CN">wzq_delete_file deletes the FileName if exists.
+
+If a bunch of files with same extension (*.bmp for example) are to be deleted, just use *.ext as FileName.</abstract>
+<chapters lang="zh_CN">
+<item>wzq</item>
+<item>Misc</item>
+</chapters>
+<library lang="zh_CN">halcon_wzq</library>
+<short lang="zh_CN">Delete FileName if exists.</short>
+<parameters>
+<parameter id="FileName">
+<description lang="zh_CN">File to be deleted.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>filename.write</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_disp_continue_message">
+<interface>
+<ic>
+<par name="WindowHandle" base_type="ctrl" dimension="0"/>
+<par name="Color" base_type="ctrl" dimension="0"/>
+<par name="Box" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* This procedure displays 'Press left button to continue' in the</c>
+<c>* lower right corner of the screen.</c>
+<c>* It uses the procedure disp_message.</c>
+<c>* </c>
+<c>* Input parameters:</c>
+<c>* WindowHandle: The window, where the text shall be displayed</c>
+<c>* Color: defines the text color.</c>
+<c>*    If set to '' or 'auto', the currently set color is used.</c>
+<c>* Box: If set to 'true', the text is displayed in a box.</c>
+<c>* </c>
+<l>ContinueMessage := 'Press left button to continue'</l>
+<l>get_window_extents (WindowHandle, Row, Column, Width, Height)</l>
+<l>get_string_extents (WindowHandle, ' ' + ContinueMessage + ' ', Ascent, Descent, TextWidth, TextHeight)</l>
+<l>disp_message (WindowHandle, ContinueMessage, 'window', Height - TextHeight - 12, Width - TextWidth - 12, Color, Box)</l>
+<l>repeat</l>
+<l>    get_mbutton (WindowHandle, Row1, Column1, Button)</l>
+<l>until (Button == 1)</l>
+<l>return ()</l>
+</body>
+<docu id="wzq_disp_continue_message">
+<abstract lang="en_US">This procedure displays 'Click 'Run' to continue' in a given Color in the lower right corner of the screen.
+If the parameter Box is set to 'true', the text is written within a white box, which is useful on irregular background.</abstract>
+<abstract lang="zh_CN">Display a continue message and pause the further process.</abstract>
+<alternatives>
+<item>disp_message</item>
+<item>write_string</item>
+</alternatives>
+<attention lang="en_US">This procedure uses the procedure disp_message.
+</attention>
+<chapters>
+<item>Graphics</item>
+<item>Text</item>
+</chapters>
+<chapters lang="de_DE">
+<item>Graphik</item>
+<item>Text</item>
+</chapters>
+<chapters lang="en_US">
+<item>Graphics</item>
+<item>Text</item>
+</chapters>
+<chapters lang="zh_CN">
+<item>wzq</item>
+<item>GUI</item>
+</chapters>
+<example lang="en_US">dev_open_window (0, 0, 512, 512, 'black', WindowHandle)
+set_display_font (WindowHandle, 16, 'mono', 'true', 'false')
+for Index := 1 to 5 by 1
+    disp_message (WindowHandle, 'Step '+Index, 'window', 30*Index, -1, 'black', 'true')
+    disp_continue_message (WindowHandle, 'black', 'true')
+    stop ()
+endfor
+</example>
+<keywords lang="de_DE">
+<item>Fortsetzungs-Nachricht anzeigen</item>
+</keywords>
+<keywords lang="en_US">
+<item>display continue message</item>
+</keywords>
+<library lang="de_DE">MVTec Standard Procedures</library>
+<library lang="en_US">MVTec Standard Procedures</library>
+<library lang="zh_CN">halcon_wzq</library>
+<predecessor>
+<item>disp_message</item>
+<item>set_display_font</item>
+<item>write_string</item>
+<item>dev_display</item>
+<item>disp_obj</item>
+<item>disp_image</item>
+</predecessor>
+<see_also>
+<item>disp_message</item>
+<item>write_string</item>
+</see_also>
+<short>This procedure displays 'Press 'Run' to continue' in the lower right corner of the screen.</short>
+<short lang="de_DE">This procedure displays 'Click 'Run' to continue' in the lower right corner of the screen.</short>
+<short lang="en_US">This procedure displays 'Click 'Run' to continue' in the lower right corner of the screen.</short>
+<short lang="zh_CN">Display a continue message and pause the further process.</short>
+<successor>
+<item>stop</item>
+</successor>
+<parameters>
+<parameter id="Box">
+<default_value>'true'</default_value>
+<description lang="en_US">If set to 'true', the text is written within a white box.</description>
+<description lang="zh_CN">Show box or not.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>attribute.value</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<value_list>
+<item>'true'</item>
+<item>'false'</item>
+</value_list>
+</parameter>
+<parameter id="Color">
+<default_value>'black'</default_value>
+<description lang="en_US">Defines the text color. If set to '' or 'auto', the currently set color is used.
+</description>
+<description lang="zh_CN">The color of text.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>color</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<values>
+<item>'black'</item>
+<item>'blue'</item>
+<item>'yellow'</item>
+<item>'red'</item>
+<item>'green'</item>
+<item>'cyan'</item>
+<item>'magenta'</item>
+<item>'forest green'</item>
+<item>'lime green'</item>
+<item>'coral'</item>
+<item>'slate blue'</item>
+</values>
+</parameter>
+<parameter id="WindowHandle">
+<default_value>WindowHandle</default_value>
+<description lang="en_US">The handle of the window, where the text shall be displayed.
+</description>
+<description lang="zh_CN">Window's handle.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>window</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_fit_2d_line">
+<interface>
+<ic>
+<par name="X" base_type="ctrl" dimension="0"/>
+<par name="Y" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="A" base_type="ctrl" dimension="0"/>
+<par name="B" base_type="ctrl" dimension="0"/>
+<par name="Success" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure fits a 2D-line into a set of 2D-points</c>
+<c>* </c>
+<c>* The procedure returns the coordinates [Ox, Oy, Oz] of</c>
+<c>* the centroid of the provided input coordinates, and</c>
+<c>* the coordinates [Nx, Ny,Nz] of the normal vector to</c>
+<c>* the fitted plane.</c>
+<c>* </c>
+<c>* WARNING: If the system of equations is under-determined</c>
+<c>* (i.e. if it has too few input coordinates in X, Y, Z),</c>
+<c>* it cannot be solved and the procedure returns empty tuples</c>
+<c>* for X, Y, and Z</c>
+<c>* </c>
+<c>* Perform some initializations</c>
+<c></c>
+<c>* </c>
+<c>* Test the size of X, Y, and return if necessary</c>
+<l>Success := true</l>
+<c></c>
+<l>Size := |X|</l>
+<l>if (Size &lt; 2 or Size != |Y|)</l>
+<l>    Success := false</l>
+<l>    return ()</l>
+<l>endif</l>
+<c></c>
+<l>create_matrix (2, |X|, [X, X - X + 1], MatrixID_Mt)</l>
+<l>transpose_matrix (MatrixID_Mt, MatrixID_M)</l>
+<l>create_matrix (1, |Y|, [Y], MatrixID_Bt)</l>
+<l>transpose_matrix (MatrixID_Bt, MatrixID_B)</l>
+<c></c>
+<l>mult_matrix (MatrixID_Mt, MatrixID_M, 'AB', MatrixID_MtM)</l>
+<l>mult_matrix (MatrixID_Mt, MatrixID_B, 'AB', MatrixID_MtB)</l>
+<l>determinant_matrix (MatrixID_MtM, 'general', Value)</l>
+<c>* </c>
+<c>* Test if more than one singular value of M is (nearly) equal</c>
+<c>* to zero. This indicates that the provided 3d points are</c>
+<c>* inappropriate to fit the plane (e.g. they are nearly</c>
+<c>* collinear or reduce to a single point).</c>
+<l>if (Value &lt; 1e-9)</l>
+<l>    Success := false</l>
+<l>    return ()</l>
+<l>endif</l>
+<c></c>
+<l>invert_matrix (MatrixID_MtM, 'general', 0, MatrixID_MtM_Inv)</l>
+<l>mult_matrix (MatrixID_MtM_Inv, MatrixID_MtB, 'AB', MatrixID_AB)</l>
+<c></c>
+<l>get_value_matrix (MatrixID_AB, [0, 1], [0, 0], AB)</l>
+<c></c>
+<l>A := AB[0]</l>
+<l>B := AB[1]</l>
+<c></c>
+<l>Success := true</l>
+<l>* mult_matrix (MatrixID_M, MatrixID_AB, 'AB', MatrixID_MAB)</l>
+<l>* sub_matrix (MatrixID_MAB, MatrixID_B, MatrixSubID)</l>
+<l>* norm_matrix (MatrixSubID, 'frobenius-norm', Mean)</l>
+<c></c>
+<l>* TheoryY := []</l>
+<l>* for Index := 0 to |X| - 1 by 1</l>
+<l>*     TheoryY := [TheoryY, X[Index] * A + B]</l>
+<l>* endfor</l>
+<l>* TheoryY := TheoryY - Y</l>
+<l>* tuple_pow (TheoryY, 2., TheoryY2)</l>
+<l>* tuple_mean (TheoryY2, Mean)</l>
+<l>* tuple_deviation (TheoryY2, Deviation)</l>
+<c></c>
+<l>* Xs := []</l>
+<l>* Ys := []</l>
+<l>* for Index := 0 to |TheoryY2| - 1 by 1</l>
+<c>    </c>
+<l>*     if (TheoryY2[Index] &lt; Threshold)</l>
+<l>*         Xs := [Xs, X[Index]]</l>
+<l>*         Ys := [Ys, Y[Index]]</l>
+<l>*     endif</l>
+<l>* endfor</l>
+<c></c>
+<l>return ()</l>
+</body>
+<docu id="wzq_fit_2d_line">
+<parameters>
+<parameter id="A">
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="B">
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="Success"/>
+<parameter id="X">
+<multivalue>true</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="Y">
+<multivalue>true</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_fwrite_line">
+<interface>
+<ic>
+<par name="FileHandle" base_type="ctrl" dimension="0"/>
+<par name="String" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<l>fwrite_string (FileHandle, String + '\n')</l>
+<l>return ()</l>
+</body>
+<docu id="wzq_fwrite_line">
+<parameters>
+<parameter id="FileHandle">
+<default_type>integer</default_type>
+<mixed_type>false</mixed_type>
+<sem_type>file</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="String">
+<default_type>string</default_type>
+<default_value>''</default_value>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>string</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_gen_caltab">
+<interface>
+<oo>
+<par name="CalTab" base_type="iconic" dimension="0"/>
+</oo>
+<ic>
+<par name="XNum" base_type="ctrl" dimension="0"/>
+<par name="YNum" base_type="ctrl" dimension="0"/>
+<par name="MarkDist" base_type="ctrl" dimension="0"/>
+<par name="DiameterRatio" base_type="ctrl" dimension="0"/>
+<par name="CalTabDescrFile" base_type="ctrl" dimension="0"/>
+<par name="CalTabTifFile" base_type="ctrl" dimension="0"/>
+<par name="PPI" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* Validate input control parameters.</c>
+<l>if (XNum &lt; 5)</l>
+<l>    throw ('Wrong value of control parameter XNum.')</l>
+<l>endif</l>
+<c></c>
+<l>if (YNum &lt; 5)</l>
+<l>    throw ('Wrong value of control parameter YNum.')</l>
+<l>endif</l>
+<c></c>
+<l>if (MarkDist &lt; 20 or MarkDist % 10 != 0 or MarkDist % 4 != 0)</l>
+<l>    throw ('Wrong value of control parameter MarkDist.')</l>
+<l>endif</l>
+<c></c>
+<l>if (DiameterRatio &lt; 0.5)</l>
+<l>    throw ('Wrong value of control parameter DiameterRatio.')</l>
+<l>endif</l>
+<c></c>
+<c>* Validate PPI. If PPI == [], use 1 as ratio.</c>
+<l>if (PPI != [])</l>
+<l>    if (PPI &lt;= 0)</l>
+<l>        throw ('Wrong value of control parameter PPI.')</l>
+<l>    else</l>
+<l>        Ratio := 0.0254 / PPI</l>
+<l>    endif</l>
+<l>else</l>
+<l>    Ratio := 1</l>
+<l>endif</l>
+<c></c>
+<l>Rows := []</l>
+<l>Cols := []</l>
+<c></c>
+<l>Diameter := MarkDist * DiameterRatio</l>
+<c></c>
+<l>for row := 1 to YNum by 1</l>
+<l>    for col := 1 to XNum by 1</l>
+<l>        Rows := [Rows, MarkDist / 2 + row * MarkDist]</l>
+<l>        Cols := [Cols, MarkDist / 2 + col * MarkDist]</l>
+<l>    endfor</l>
+<l>endfor</l>
+<c></c>
+<l>ImageX := MarkDist * (XNum + 2)</l>
+<l>ImageY := MarkDist * (YNum + 2)</l>
+<l>gen_image_const (CalTab, 'byte', ImageX, ImageY)</l>
+<l>gen_image_proto (CalTab, CalTab, 255)</l>
+<c></c>
+<l>tuple_gen_const (XNum * YNum, Diameter / 2, Radius)</l>
+<c></c>
+<l>gen_circle (Circle, Rows, Cols, Radius)</l>
+<c></c>
+<l>paint_region (Circle, CalTab, CalTab, 0, 'fill')</l>
+<c></c>
+<l>W := MarkDist * (XNum + 1)</l>
+<l>H := MarkDist * (YNum + 1)</l>
+<l>Wh := W / 2</l>
+<l>Hh := H / 2</l>
+<c></c>
+<l>Lef := MarkDist / 2</l>
+<l>Rig := MarkDist / 2 + W</l>
+<l>Top := MarkDist / 2</l>
+<l>Bot := MarkDist / 2 + H</l>
+<c></c>
+<l>gen_rectangle1 (RectangleOut, Top, Lef, Bot, Rig)</l>
+<c></c>
+<l>Shift := MarkDist / 4</l>
+<l>MD := MarkDist</l>
+<l>MDS := MarkDist / 10</l>
+<c></c>
+<l>gen_rectangle1 (RectangleIn, Top + Shift, Lef + Shift, Bot - Shift, Rig - Shift)</l>
+<l>difference (RectangleOut, RectangleIn, RegionDifference)</l>
+<c></c>
+<l>Rows := [Top, Top + MarkDist, Top, Top]</l>
+<l>Cols := [Lef, Lef, Lef + MarkDist, Lef]</l>
+<c></c>
+<l>gen_region_polygon_filled (RegionTriangle, Rows, Cols)</l>
+<c></c>
+<l>paint_region (RegionDifference, CalTab, CalTab, 0, 'fill')</l>
+<l>paint_region (RegionTriangle, CalTab, CalTab, 0, 'fill')</l>
+<c></c>
+<l>if (CalTabTifFile != '')</l>
+<l>    write_image (CalTab, 'tiff', 0, CalTabTifFile)</l>
+<l>endif</l>
+<c></c>
+<l>if (CalTabDescrFile == '')</l>
+<l>    return ()</l>
+<l>endif</l>
+<l>* if (ImageX &gt; PicW)</l>
+<l>*     PicW := ImageX</l>
+<l>* endif</l>
+<c></c>
+<l>* if (ImageY &gt; PicH)</l>
+<l>*     PicH := ImageY</l>
+<l>* endif</l>
+<c></c>
+<l>* hom_mat2d_identity (HomMat2DIdentity)</l>
+<l>* hom_mat2d_translate (HomMat2DIdentity, (PicH - ImageY) / 2, (PicW - ImageX) / 2, HomMat2DTranslate)</l>
+<l>* affine_trans_image_size (ImageResult2, ImageAffinTrans, HomMat2DTranslate, 'constant', PicW, PicH)</l>
+<c></c>
+<l>* write_image (ImageAffinTrans, 'tiff', 0, CalTabTifFile)</l>
+<c></c>
+<l>get_system_time (MSecond, Second, Minute, Hour, Day, YDay, Month, Year)</l>
+<l>DayString := Year$'4d' + '/' + Month$'02d' + '/' + Day$'02d'</l>
+<l>TimeString := Hour$'02d' + ':' + Minute$'02d' + ':' + Second$'02d'</l>
+<l>Descr := ''</l>
+<l>Descr := Descr + '# Plate Description Version 2\n'</l>
+<l>Descr := Descr + '# HALCON Version 11.0 --  ' + DayString + ' ' + TimeString + '\n'</l>
+<l>Descr := Descr + '# Description of the standard calibration plate\n'</l>
+<l>Descr := Descr + '# used for the camera calibration in HALCON\n'</l>
+<l>Descr := Descr + '# (generated by wzq_gen_caltab)\n'</l>
+<l>Descr := Descr + '# NumRows:\t' + YNum + '\n'</l>
+<l>Descr := Descr + '# NumCols:\t' + XNum + '\n'</l>
+<l>Descr := Descr + '# MarkDist:\t' + MarkDist + ' pixels\n'</l>
+<l>Descr := Descr + '# DiameterRatio:\t' + DiameterRatio + '\n'</l>
+<l>if (PPI == [])</l>
+<l>    Descr := Descr + '# PPI:\t\t' + '[]' + '\n'</l>
+<l>else</l>
+<l>    Descr := Descr + '# PPI:\t\t' + PPI + '\n'</l>
+<l>endif</l>
+<l>Descr := Descr + '#\n'</l>
+<l>Descr := Descr + '#\n'</l>
+<l>Descr := Descr + '\n'</l>
+<l>Descr := Descr + '# ' + YNum +' rows x ' + XNum + ' columns\n'</l>
+<l>Descr := Descr + '# Width, height of calibration plate [meter]: ' + W * Ratio + ', ' + H * Ratio + '\n'</l>
+<l>Descr := Descr + '# Distance between mark centers [meter]: ' + MarkDist * Ratio + '\n'</l>
+<l>Descr := Descr + '\n'</l>
+<l>Descr := Descr + '# Number of marks in y-dimension (rows)\n'</l>
+<l>Descr := Descr + 'r ' + YNum + '\n'</l>
+<l>Descr := Descr + '\n'</l>
+<l>Descr := Descr + '# Number of marks in x-dimension (columns)\n'</l>
+<l>Descr := Descr + 'c ' + XNum + '\n'</l>
+<l>Descr := Descr + '\n'</l>
+<l>Descr := Descr + '#   offset of coordinate system in z-dimension [meter] (optional):\n'</l>
+<l>Descr := Descr + 'z ' + 0 + '\n'</l>
+<l>Descr := Descr + '\n'</l>
+<l>Descr := Descr + '# Rectangular border (rim and black frame) of calibration plate\n'</l>
+<l>Descr := Descr + '#   rim of the calibration plate (min x, max y, max x, min y) [meter]:\n'</l>
+<l>Descr := Descr + 'o ' + (-Wh - MDS) * Ratio+ ' ' + (Hh + MDS) * Ratio + ' ' + (Wh + MDS) * Ratio + ' ' + (-Hh - MDS) * Ratio+ '\n'</l>
+<l>Descr := Descr + '#   outer border of the black frame (min x, max y, max x, min y) [meter]:\n'</l>
+<l>Descr := Descr + 'i ' + -Wh * Ratio + ' ' + Hh * Ratio + ' ' + Wh * Ratio + ' ' + -Hh * Ratio + '\n'</l>
+<l>Descr := Descr + '#   triangular corner mark given by two corner points (x,y, x,y) [meter]:\n'</l>
+<l>Descr := Descr + '#   (optional):\n'</l>
+<l>Descr := Descr + 't ' + -Wh * Ratio + ' ' + (-Hh + MD) * Ratio + ' ' + (-Wh + MD) * Ratio + ' ' + -Hh * Ratio + '\n'</l>
+<l>Descr := Descr + '\n'</l>
+<l>Descr := Descr + '#   width of the black frame [meter]:\n'</l>
+<l>Descr := Descr + 'w ' + Shift * Ratio + '\n'</l>
+<l>Descr := Descr + '\n'</l>
+<l>Descr := Descr + '# calibration marks:  x y radius [meter]\n'</l>
+<c></c>
+<l>for Y := 1 to YNum by 1</l>
+<l>    CoordY := MD * Y - Hh</l>
+<l>    Descr := Descr + '\n'</l>
+<l>    Descr := Descr + '# calibration marks at y = ' + CoordY * Ratio+ ' m\n'</l>
+<c>    </c>
+<l>    for X := 1 to XNum by 1</l>
+<l>        CoordX := MD * X - Wh</l>
+<l>        Descr := Descr + CoordX * Ratio + ' ' + CoordY * Ratio + ' ' + Diameter / 2.0 * Ratio + '\n'</l>
+<l>    endfor</l>
+<l>endfor</l>
+<c></c>
+<l>try</l>
+<l>    open_file (CalTabDescrFile, 'output', FileHandle)</l>
+<l>catch (Exception)</l>
+<l>    throw ('Wrong value of control parameter CalTabDescr.')</l>
+<l>endtry</l>
+<l>fwrite_string (FileHandle, Descr)</l>
+<l>close_file (FileHandle)</l>
+<c></c>
+<l>return ()</l>
+</body>
+<docu id="wzq_gen_caltab">
+<abstract lang="zh_CN">wzq_gen_caltab generates the description of a standard HALCON calibration plate with rectangularly arranged marks. This calibration plate consists of XNum times YNum black circular marks on a white plane which are surrounded by a black frame. The marks are arranged in a rectangular grid with YNum and XNum equidistant rows and columns. The distances between these rows and columns defines the parameter MarkDist in meter. The marks' diameter can be set by the parameter DiameterRatio and is defined by the equation Diameter = MarkDist * DiameterRatio.</abstract>
+<chapters lang="zh_CN">
+<item>wzq</item>
+<item>Calibration</item>
+</chapters>
+<library lang="zh_CN">halcon_wzq</library>
+<short lang="zh_CN">Generate a calibration tab description file and a corresponding TIF file for a calibration tab with rectangularly arranged marks.</short>
+<parameters>
+<parameter id="CalTab">
+<description lang="zh_CN">Created image with rectangularly arranged marks.</description>
+<multichannel>false</multichannel>
+<multivalue>false</multivalue>
+<sem_type>image</sem_type>
+<type_list>
+<item>byte</item>
+</type_list>
+</parameter>
+<parameter id="CalTabDescrFile">
+<default_value>'caltab.descr'</default_value>
+<description lang="zh_CN">File name of the calibration tab description.
+Use '' to skip saving this file.</description>
+<file_ext>
+<item>descr</item>
+</file_ext>
+<file_ext_descr lang="zh_CN">
+<item>Calibration Tab Description</item>
+</file_ext_descr>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>filename.write</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<values>
+<item>'caltab.descr'</item>
+<item>''</item>
+</values>
+</parameter>
+<parameter id="CalTabTifFile">
+<default_value>'caltab.tif'</default_value>
+<description lang="zh_CN">File name of the TIF file.
+Use '' to skip saving this file.</description>
+<file_ext>
+<item>tif</item>
+</file_ext>
+<file_ext_descr lang="zh_CN">
+<item>Tagged Image File</item>
+</file_ext_descr>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>filename.write</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<values>
+<item>'caltab.tif'</item>
+<item>''</item>
+</values>
+</parameter>
+<parameter id="DiameterRatio">
+<default_value>0.5</default_value>
+<description lang="zh_CN">Diameter equals to MarkDist * DiameterRatio.
+DiameterRatio &gt;= 0.5</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="MarkDist">
+<default_value>100</default_value>
+<description lang="zh_CN">Distance between marks in pixel unit.
+Must be 20 * N (N &gt;= 1).</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>number</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="PPI">
+<default_value>[]</default_value>
+<description lang="zh_CN">Pixel per inch.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="XNum">
+<default_value>7</default_value>
+<description lang="zh_CN">Number of Columns.
+XNum &gt;= 5</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>number</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="YNum">
+<default_value>7</default_value>
+<description lang="zh_CN">Number of rows.
+YNum &gt;= 5</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>number</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_gen_caltab2">
+<interface>
+<ic>
+<par name="XNum" base_type="ctrl" dimension="0"/>
+<par name="YNum" base_type="ctrl" dimension="0"/>
+<par name="SizeX" base_type="ctrl" dimension="0"/>
+<par name="SizeY" base_type="ctrl" dimension="0"/>
+<par name="PicW" base_type="ctrl" dimension="0"/>
+<par name="PicH" base_type="ctrl" dimension="0"/>
+<par name="DiameterRatio" base_type="ctrl" dimension="0"/>
+<par name="PPI" base_type="ctrl" dimension="0"/>
+<par name="CalTabDescrFile" base_type="ctrl" dimension="0"/>
+<par name="CalTabPicFile" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<l>PPM := PPI / 0.0254</l>
+<c></c>
+<l>DisX := SizeX / 1000. * PPM / (XNum + 1)</l>
+<l>DisY := SizeY / 1000. * PPM / (YNum + 1)</l>
+<c></c>
+<l>Dis := [DisX, DisY]</l>
+<l>tuple_max (Dis, MarkDist)</l>
+<l>tuple_ceil (MarkDist, Ceil)</l>
+<c></c>
+<l>wzq_gen_caltab (CalTab, XNum, YNum, Ceil, DiameterRatio, CalTabDescrFile, CalTabPicFile, PPI)</l>
+<c></c>
+<l>return ()</l>
+</body>
+<docu id="wzq_gen_caltab2">
+<parameters>
+<parameter id="CalTabDescrFile">
+<default_type>string</default_type>
+<default_value>caltab.descr</default_value>
+<file_ext>
+<item>descr</item>
+</file_ext>
+<mixed_type>false</mixed_type>
+<sem_type>filename</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+<parameter id="CalTabPicFile">
+<default_type>string</default_type>
+<default_value>caltab.tif</default_value>
+<file_ext>
+<item>tif</item>
+</file_ext>
+<mixed_type>false</mixed_type>
+<sem_type>filename</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+<parameter id="DiameterRatio">
+<default_type>real</default_type>
+<default_value>0.5</default_value>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="PPI">
+<default_type>integer</default_type>
+<default_value>326</default_value>
+<sem_type>number</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="PicH">
+<default_type>integer</default_type>
+<default_value>1136</default_value>
+<sem_type>number</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="PicW">
+<default_type>integer</default_type>
+<default_value>640</default_value>
+<sem_type>number</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="SizeX">
+<default_type>real</default_type>
+<default_value>40</default_value>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="SizeY">
+<default_type>real</default_type>
+<default_value>40</default_value>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="XNum">
+<default_type>integer</default_type>
+<default_value>7</default_value>
+<sem_type>number</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="YNum">
+<default_type>integer</default_type>
+<default_value>7</default_value>
+<sem_type>number</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_gen_line_center">
+<interface>
+<io>
+<par name="Image" base_type="iconic" dimension="0"/>
+</io>
+<oc>
+<par name="Rows" base_type="ctrl" dimension="0"/>
+<par name="Cols" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>**********gen line center</c>
+<l>* get_image_size (Image, Width, Height)</l>
+<l>* convert_image_type (Image, ImageConverted, 'real')</l>
+<l>* convol_image (ImageConverted, ImageConvol, [5, 1, 5, 1, 1, 1, 1, 1], 0)</l>
+<l>* Threshold := 100</l>
+<c></c>
+<l>* tuple_gen_const (Width, -1., Cent)</l>
+<c></c>
+<l>* tuple_gen_const (Height, 0, TupleMax)</l>
+<c></c>
+<l>* for IndexW := 0 to Width - 1 by 1</l>
+<l>*     TupleMax := TupleMax - TupleMax</l>
+<l>*     MaxGray := Threshold</l>
+<l>*     ID := 0</l>
+<l>*     for IndexH := 0 to Height -1 by 1</l>
+<l>*         get_grayval (ImageConvol, IndexH, IndexW, Grayval)</l>
+<c>        </c>
+<l>*         if (Grayval &gt; MaxGray)</l>
+<l>*             ID := ID + 1</l>
+<l>*             MaxGray := Grayval</l>
+<l>*             TupleMax[IndexH] := ID</l>
+<l>*         elseif (Grayval == MaxGray)</l>
+<l>*             TupleMax[IndexH] := ID</l>
+<l>*         else</l>
+<l>*             TupleMax[IndexH] := ID - 1</l>
+<l>*         endif</l>
+<l>*     endfor</l>
+<c>    </c>
+<l>*     if (ID == 0)</l>
+<l>*         continue</l>
+<l>*     endif</l>
+<c>    </c>
+<l>*     start := []</l>
+<l>*     end := []</l>
+<c>    </c>
+<l>*     if (TupleMax[0] == ID)</l>
+<l>*         start := [start, 0]</l>
+<l>*         if (TupleMax[1] != ID)</l>
+<l>*             end := [end, 0]</l>
+<l>*         endif</l>
+<l>*     endif</l>
+<c>    </c>
+<c>    </c>
+<c>    </c>
+<l>*     for IndexH := 1 to Height - 2 by 1</l>
+<l>*         if (TupleMax[IndexH] == ID)</l>
+<l>*             if (TupleMax[IndexH - 1] != ID)</l>
+<l>*                 start := [start, IndexH]</l>
+<l>*             endif</l>
+<c>            </c>
+<l>*             if (TupleMax[IndexH + 1] != ID)</l>
+<l>*                 end := [end, IndexH]</l>
+<l>*             endif</l>
+<l>*         endif</l>
+<l>*     endfor</l>
+<c>    </c>
+<l>*     if (TupleMax[Height - 1] == ID)</l>
+<l>*         end := [end, Height - 1]</l>
+<l>*         if (TupleMax[Height - 2] != ID)</l>
+<l>*             start := [start, Height - 1]</l>
+<l>*         endif</l>
+<l>*     endif</l>
+<c>    </c>
+<c>    </c>
+<c>    </c>
+<l>*     if (|start| != |end|)</l>
+<l>*         throw (['wzq_gen_line_center'])</l>
+<l>*     endif</l>
+<c>    </c>
+<l>*     if (|start| != 1)</l>
+<l>*         continue</l>
+<l>*     endif</l>
+<c>    </c>
+<l>*     Cent[IndexW] := (start[0] + end[0]) / 2.</l>
+<l>* endfor</l>
+<c></c>
+<l>* Rows := []</l>
+<l>* Cols := []</l>
+<l>* for Index := 0 to |Cent| - 1 by 1</l>
+<l>*     if (Cent[Index] != -1.)</l>
+<l>*         Rows := [Rows, Cent[Index]]</l>
+<l>*         Cols := [Cols, Index]</l>
+<l>*     endif</l>
+<l>* endfor</l>
+<c></c>
+<l>return ()</l>
+</body>
+<docu id="wzq_gen_line_center">
+<parameters>
+<parameter id="Cols"/>
+<parameter id="Image"/>
+<parameter id="Rows"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_gen_opencv_circle_grid_asy">
+<interface>
+<oo>
+<par name="CalPlate" base_type="iconic" dimension="0"/>
+</oo>
+<ic>
+<par name="NumRows" base_type="ctrl" dimension="0"/>
+<par name="NumCols" base_type="ctrl" dimension="0"/>
+<par name="Radius" base_type="ctrl" dimension="0"/>
+<par name="Distant" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* Validate input control parameters.</c>
+<l>if (NumCols % 2 == 0)</l>
+<l>    throw ('NumCols should be odd integer!')</l>
+<l>endif</l>
+<c></c>
+<l>NumColsOdd := NumCols / 2 + 1</l>
+<l>NumColsEven := NumCols / 2</l>
+<l>W := Distant * (NumCols + 1)</l>
+<l>H := Distant * (NumRows * 2 + 1)</l>
+<c></c>
+<l>R := []</l>
+<l>C := []</l>
+<c></c>
+<l>for Row := 0 to NumRows - 1 by 1</l>
+<l>    for Col := 0 to NumColsOdd - 1 by 1</l>
+<l>        R := [R, Row * Distant * 2 + Distant]</l>
+<l>        C := [C, Col * Distant * 2 + Distant]</l>
+<l>    endfor</l>
+<c>    </c>
+<l>    for Col := 0 to NumColsEven - 1 by 1</l>
+<l>        R := [R, Row * Distant * 2 + Distant * 2]</l>
+<l>        C := [C, Col * Distant * 2 + Distant * 2]</l>
+<l>    endfor</l>
+<l>endfor</l>
+<c></c>
+<l>tuple_gen_const (|R|, Radius, Rad)</l>
+<l>gen_circle_contour_xld (Circles, R, C, Rad, 0, rad(360), 'positive', 0.01)</l>
+<c></c>
+<l>gen_image_const (CalPlate, 'byte', W, H)</l>
+<l>get_domain (CalPlate, Domain)</l>
+<l>paint_region (Domain, CalPlate, CalPlate, 255, 'fill')</l>
+<l>paint_xld (Circles, CalPlate, CalPlate, 0)</l>
+<l>return ()</l>
+</body>
+<docu id="wzq_gen_opencv_circle_grid_asy">
+<parameters>
+<parameter id="CalPlate"/>
+<parameter id="Distant"/>
+<parameter id="NumCols"/>
+<parameter id="NumRows"/>
+<parameter id="Radius"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_grab_image_n">
+<interface>
+<oo>
+<par name="Images" base_type="iconic" dimension="0"/>
+</oo>
+<ic>
+<par name="AcqHandle" base_type="ctrl" dimension="0"/>
+<par name="N" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<l>gen_empty_obj (Images)</l>
+<l>for Index := 1 to N by 1</l>
+<l>    grab_image (Image, AcqHandle)</l>
+<l>    concat_obj (Images, Image, Images)</l>
+<l>endfor</l>
+<l>return ()</l>
+</body>
+<docu id="wzq_grab_image_n">
+<short lang="zh_CN">Grab N images</short>
+<parameters>
+<parameter id="AcqHandle">
+<mixed_type>false</mixed_type>
+<sem_type>framegrabber</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="Images">
+<sem_type>image</sem_type>
+</parameter>
+<parameter id="N">
+<default_type>integer</default_type>
+<sem_type>number</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_hom_mat3d_project">
+<interface>
+<ic>
+<par name="HomMat3D" base_type="ctrl" dimension="0"/>
+<par name="a" base_type="ctrl" dimension="0"/>
+<par name="b" base_type="ctrl" dimension="0"/>
+<par name="c" base_type="ctrl" dimension="0"/>
+<par name="d" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="HomMat3DProject" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<l>hom_mat3d_identity (HomMat3DIdentity)</l>
+<c></c>
+<l>HomMat3DIdentity[12] := -(a * 1.0 / d)</l>
+<l>HomMat3DIdentity[13] := -(b * 1.0 / d)</l>
+<l>HomMat3DIdentity[14] := -(c * 1.0 / d)</l>
+<l>HomMat3DIdentity[15] := 0.0</l>
+<c></c>
+<l>hom_mat3d_compose (HomMat3DIdentity, HomMat3D, HomMat3DProject)</l>
+<c></c>
+<l>return ()</l>
+</body>
+<docu id="wzq_hom_mat3d_project">
+<abstract lang="zh_CN">Given input transformation matrix(HomMat3D) and a Plane, return the projective matrix.</abstract>
+<chapters lang="zh_CN">
+<item>wzq</item>
+<item>3D Transformations</item>
+</chapters>
+<library lang="zh_CN">halcon_wzq</library>
+<short lang="zh_CN">Add a projection to a homogeneous 3D transformation matrix.</short>
+<parameters>
+<parameter id="HomMat3D">
+<description lang="zh_CN">Input transformation matrix.</description>
+<mixed_type>false</mixed_type>
+<sem_type>hom_mat3d</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="HomMat3DProject">
+<description lang="zh_CN">Projective matrix.</description>
+<mixed_type>false</mixed_type>
+<sem_type>hom_mat3d</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="a">
+<description lang="zh_CN">Plane a * x + b * y + c * z + d = 0</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="b">
+<description lang="zh_CN">Plane a * x + b * y + c * z + d = 0</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="c">
+<description lang="zh_CN">Plane a * x + b * y + c * z + d = 0</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="d">
+<description lang="zh_CN">Plane a * x + b * y + c * z + d = 0</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_measure">
+<interface>
+<io>
+<par name="Image" base_type="iconic" dimension="0"/>
+</io>
+<ic>
+<par name="Row1" base_type="ctrl" dimension="0"/>
+<par name="Col1" base_type="ctrl" dimension="0"/>
+<par name="Row2" base_type="ctrl" dimension="0"/>
+<par name="Col2" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="X" base_type="ctrl" dimension="0"/>
+<par name="Y" base_type="ctrl" dimension="0"/>
+<par name="Z" base_type="ctrl" dimension="0"/>
+<par name="R" base_type="ctrl" dimension="0"/>
+<par name="C" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<l>get_image_size (Image, Width, Height)</l>
+<c></c>
+<l>gen_rectangle1 (Rectangle, Row1, Col1, Row2, Col2)</l>
+<l>reduce_domain (Image, Rectangle, ImageReduced)</l>
+<c></c>
+<l>lines_gauss (ImageReduced, Lines, 1.5, 3, 8, 'light', 'true', 'bar-shaped', 'true')</l>
+<c></c>
+<l>smallest_rectangle1_xld(Lines, Row1, Col1, Row2, Col2)</l>
+<c></c>
+<l>tuple_floor (Row1, Row1)</l>
+<l>tuple_floor (Col1, Col1)</l>
+<l>tuple_ceil (Row2, Row2)</l>
+<l>tuple_ceil (Col2, Col2)</l>
+<c></c>
+<c></c>
+<l>count_obj (Lines, Number)</l>
+<c></c>
+<l>ColReady := 0</l>
+<l>ColFiled := 1</l>
+<l>ColError := 2</l>
+<c></c>
+<l>tuple_gen_const (Width, ColReady, Cols)</l>
+<l>tuple_gen_const (Width, -1., Rows)</l>
+<c></c>
+<c></c>
+<l>for Index := 1 to Number by 1</l>
+<l>    select_obj (Lines, Line, Index)</l>
+<c>    </c>
+<l>    for IndexCol := Col1[Index - 1] to Col2[Index - 1] by 1</l>
+<l>        if(Cols[IndexCol] == ColError)</l>
+<l>            continue</l>
+<l>        endif</l>
+<c>        </c>
+<l>        intersection_line_contour_xld (Line, Row1[Index - 1], IndexCol, Row2[Index - 1], IndexCol, Row, Col, IsOverlapping)</l>
+<l>        if(IsOverlapping == true or |Row| &gt; 1)        </l>
+<l>            Cols[IndexCol] := ColError</l>
+<l>        elseif(Row == [])</l>
+<l>            continue</l>
+<l>        else</l>
+<l>            if(Cols[IndexCol] == ColFiled)</l>
+<l>                Cols[IndexCol] := ColError</l>
+<l>            else</l>
+<l>                Cols[IndexCol] := ColFiled</l>
+<l>                Rows[IndexCol] := Row[0]</l>
+<l>            endif</l>
+<l>        endif</l>
+<l>    endfor</l>
+<l>endfor</l>
+<l>C := []</l>
+<l>R := []</l>
+<l>for Index := 0 to Width - 1 by 1</l>
+<l>    if (Cols[Index] == ColFiled)</l>
+<l>        C := [C, Index]</l>
+<l>        R := [R, Rows[Index]]</l>
+<l>    endif</l>
+<l>endfor</l>
+<c></c>
+<l>* disp_line (3600, 430, 250, 425, 250)</l>
+<l>* disp_cross (3600, Rows, Cols, 6, 0)</l>
+<l>return ()</l>
+</body>
+<docu id="wzq_measure">
+<parameters>
+<parameter id="C"/>
+<parameter id="Col1"/>
+<parameter id="Col2"/>
+<parameter id="Image"/>
+<parameter id="R"/>
+<parameter id="Row1"/>
+<parameter id="Row2"/>
+<parameter id="X"/>
+<parameter id="Y"/>
+<parameter id="Z"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_measure2">
+<interface>
+<io>
+<par name="Image" base_type="iconic" dimension="0"/>
+</io>
+<oc>
+<par name="R" base_type="ctrl" dimension="0"/>
+<par name="C" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<l>get_image_size (Image, Width, Height)</l>
+<l>* gen_rectangle1 (Rectangle, 300, 20, 415, 1200)</l>
+<c></c>
+<l>* reduce_domain (Image, Rectangle, Image)</l>
+<c></c>
+<l>lines_gauss (Image, Lines, 2.2, 3, 8, 'light', 'true', 'bar-shaped', 'true')</l>
+<c></c>
+<l>smallest_rectangle1_xld(Lines, Row1, Col1, Row2, Col2)</l>
+<c></c>
+<l>tuple_ceil (Row1, Row1)</l>
+<l>tuple_ceil (Col1, Col1)</l>
+<l>tuple_floor (Row2, Row2)</l>
+<l>tuple_floor (Col2, Col2)</l>
+<c></c>
+<l>count_obj (Lines, Number)</l>
+<c></c>
+<l>ColReady := 0</l>
+<l>ColFiled := 1</l>
+<l>ColError := 2</l>
+<c></c>
+<l>tuple_gen_const (Width, ColReady, Cols)</l>
+<l>tuple_gen_const (Width, -1., Rows)</l>
+<c></c>
+<c></c>
+<l>for Index := 0 to Number - 1 by 1</l>
+<l>    select_obj (Lines, Line, Index + 1)</l>
+<c>    </c>
+<l>    r1 := Row1[Index]</l>
+<l>    r2 := Row2[Index]</l>
+<l>    c1 := Col1[Index]</l>
+<l>    c2 := Col2[Index]</l>
+<c>    </c>
+<l>    if(r2 &lt;= r1 or c2 &lt;= c1)</l>
+<l>        continue</l>
+<l>    endif</l>
+<c>    </c>
+<l>    for IndexCol := c1 to c2 by 1</l>
+<l>        if(Cols[IndexCol] == ColError)</l>
+<l>            continue</l>
+<l>        endif</l>
+<c>        </c>
+<l>        intersection_line_contour_xld (Line, r1, IndexCol, r2, IndexCol, Row, Col, IsOverlapping)</l>
+<c>        </c>
+<l>        if(|Row| &lt; 1)</l>
+<l>            continue</l>
+<l>        endif</l>
+<c>        </c>
+<l>        if(Cols[IndexCol] == ColFiled)</l>
+<l>            Cols[IndexCol] := ColError</l>
+<l>        else</l>
+<l>            if(|Row| != 1)</l>
+<l>                Cols[IndexCol] := ColError</l>
+<l>            else</l>
+<l>                Cols[IndexCol] := ColFiled</l>
+<l>                Rows[IndexCol] := Row[0]</l>
+<l>            endif</l>
+<l>        endif</l>
+<l>    endfor</l>
+<l>endfor</l>
+<c></c>
+<l>C := []</l>
+<l>R := []</l>
+<l>for Index := 0 to Width - 1 by 1</l>
+<l>    if (Cols[Index] == ColFiled)</l>
+<l>        C := [C, Index]</l>
+<l>        R := [R, Rows[Index]]</l>
+<l>    endif</l>
+<l>endfor</l>
+<c></c>
+<l>* disp_line (3600, 430, 250, 425, 250)</l>
+<l>* disp_cross (3600, R, C, 6, 0)</l>
+<l>return ()</l>
+</body>
+<docu id="wzq_measure2">
+<parameters>
+<parameter id="C"/>
+<parameter id="Image"/>
+<parameter id="R"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_median_image">
+<interface>
+<io>
+<par name="Images" base_type="iconic" dimension="0"/>
+</io>
+<oo>
+<par name="MedianImage" base_type="iconic" dimension="0"/>
+</oo>
+</interface>
+<body>
+<l>count_obj (Images, Number)</l>
+<l>if (Number &lt; 3 or Number % 2 == 0)</l>
+<l>    throw ('Wrong value of control parameter Images')</l>
+<l>endif</l>
+<c></c>
+<l>Number := Number + 1</l>
+<l>channels_to_image (Images, MultiChannelImage)</l>
+<l>rank_n (MultiChannelImage, MedianImage, Number / 2)</l>
+<l>return ()</l>
+</body>
+<docu id="wzq_median_image">
+<abstract lang="zh_CN">wzq_median_image calculates the median rank of N images. N &gt;= 3, N is odd.</abstract>
+<chapters lang="zh_CN">
+<item>Filters</item>
+<item>Smoothing</item>
+</chapters>
+<short lang="zh_CN">Calculate the median rank of N images with N &gt;= 3, N is odd</short>
+<parameters>
+<parameter id="Images">
+<description lang="zh_CN">Image tuple to be processed</description>
+<multivalue>true</multivalue>
+<sem_type>image</sem_type>
+</parameter>
+<parameter id="MedianImage">
+<description lang="zh_CN">Result of median rank process</description>
+<multivalue>false</multivalue>
+<sem_type>image</sem_type>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_open_framegrabber_gige">
+<interface>
+<ic>
+<par name="Device" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="AcqHandle" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<l>if (is_int (Device))</l>
+<l>    info_framegrabber ('GigEVision', 'info_boards', BoardInfo, BoardInfoValues)</l>
+<l>    if (|BoardInfoValues| == 0)</l>
+<l>        throw ('Not found GigE camera!')</l>
+<l>    elseif (Device &lt; 0 or Device &gt;= |BoardInfoValues|)       </l>
+<l>        throw ('Index into invalid array!')</l>
+<l>    else</l>
+<l>        BoardInfoValues := split (BoardInfoValues[Device], ': ')</l>
+<l>        Device := BoardInfoValues[1]</l>
+<l>    endif</l>
+<l>endif</l>
+<c></c>
+<c>* '0030531d20f9_Basler_acA160020gm'</c>
+<l>open_framegrabber ('GigEVision', 0, 0, 0, 0, 0, 0, 'default', -1, 'default', -1, 'false', 'default', Device, -1, -1, AcqHandle)</l>
+<l>* get_framegrabber_param (AcqHandle, 'available_param_names', Value)</l>
+<l>* Values := []</l>
+<l>* params := []</l>
+<c></c>
+<l>* for Index := 0 to |Value| - 1 by 1</l>
+<l>*     try</l>
+<l>*         get_framegrabber_param (AcqHandle, Value[Index], param)</l>
+<c>        </c>
+<l>*         params := [params, sum (param)]</l>
+<l>*         Values := [Values, Value[Index]]</l>
+<l>*     catch (Exception)</l>
+<l>*         continue</l>
+<l>*     endtry</l>
+<c>    </c>
+<l>* endfor</l>
+<l>return ()</l>
+</body>
+<docu id="wzq_open_framegrabber_gige">
+<abstract lang="zh_CN">Given camera device unique name, ID, index, try to open it and return AcqHandle.</abstract>
+<chapters lang="zh_CN">
+<item>Image</item>
+<item>Acquisition</item>
+</chapters>
+<library lang="zh_CN">halcon_wzq</library>
+<short lang="zh_CN">Open GigE camera concisely</short>
+<parameters>
+<parameter id="AcqHandle"/>
+<parameter id="Device">
+<default_value>'default'</default_value>
+<mixed_type>optional</mixed_type>
+<multivalue>false</multivalue>
+<values>
+<item>0</item>
+<item>1</item>
+<item>'default'</item>
+</values>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_read_tuple_binary">
+<interface>
+<ic>
+<par name="FileName" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="Tuple" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<l>open_file (FileName, 'input_binary', FileHandle)</l>
+<l>fread_serialized_item (FileHandle, SerializedItemHandle)</l>
+<l>deserialize_tuple (SerializedItemHandle, Tuple)</l>
+<l>close_file (FileHandle)</l>
+<l>return ()</l>
+</body>
+<docu id="wzq_read_tuple_binary">
+<parameters>
+<parameter id="FileName">
+<default_type>string</default_type>
+<default_value>''</default_value>
+<file_ext>
+<item>tup</item>
+</file_ext>
+<file_ext_descr lang="zh_CN">
+<item>Binary tuple file</item>
+</file_ext_descr>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>filename.read</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+<parameter id="Tuple">
+<sem_type>any</sem_type>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_rel_pose">
+<interface>
+<ic>
+<par name="Pose1" base_type="ctrl" dimension="0"/>
+<par name="Pose2" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="RelPose" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<l>pose_to_hom_mat3d (Pose1, HomMat1)</l>
+<l>pose_to_hom_mat3d (Pose2, HomMat2)</l>
+<c></c>
+<l>hom_mat3d_invert (HomMat2, HomMatInvert2)</l>
+<l>hom_mat3d_compose (HomMat1, HomMatInvert2, HomMat)</l>
+<l>hom_mat3d_to_pose (HomMat, RelPose)</l>
+<l>return ()</l>
+</body>
+<docu id="wzq_rel_pose">
+<short lang="zh_CN">Calculate the relative pose from two given poses</short>
+<parameters>
+<parameter id="Pose1">
+<default_type>real</default_type>
+<sem_type>pose</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="Pose2">
+<default_type>real</default_type>
+<sem_type>pose</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="RelPose">
+<default_type>real</default_type>
+<sem_type>pose</sem_type>
+<type_list>
+<item>real</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_save_observ_points">
+<interface>
+<ic>
+<par name="CalibHandle" base_type="ctrl" dimension="0"/>
+<par name="CalibObjPoseNum" base_type="ctrl" dimension="0"/>
+<par name="FileName" base_type="ctrl" dimension="0"/>
+<par name="Reversed" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<l>str := '%YAML:1.0\n'</l>
+<l>str := str + '---\n'</l>
+<l>str := str + 'image points:\n'</l>
+<c></c>
+<l>for Index := 0 to CalibObjPoseNum - 1 by 1</l>
+<l>    get_calib_data_observ_points (CalibHandle, 0, 0, Index, Row, Column, _Index, _Pose)</l>
+<l>    str := str + '  - [ '</l>
+<l>    Indices := find_first(Reversed, Index)</l>
+<l>    if (Indices == -1)</l>
+<l>        for i := |Row| - 1 to 0 by -1</l>
+<l>            str := str + (Column[i])$'-8.3f' + ', ' + (Row[i]$'-8.3f')</l>
+<l>            if(i != 0)</l>
+<l>                str := str + ', '</l>
+<l>            endif</l>
+<l>        endfor</l>
+<l>    else</l>
+<l>        for i := 0 to |Row| - 1 by 1</l>
+<l>            str := str + (Column[i])$'-8.3f' + ', ' + (Row[i]$'-8.3f')</l>
+<l>            if(i != |Row| - 1)</l>
+<l>                str := str + ', '</l>
+<l>            endif</l>
+<l>        endfor</l>
+<l>    endif</l>
+<c></c>
+<l>    str := str + ']\n'</l>
+<l>endfor</l>
+<c></c>
+<l>open_file (FileName, 'output', FileHandle)</l>
+<l>fwrite_string (FileHandle, str)</l>
+<l>close_file (FileHandle)</l>
+<l>return ()</l>
+</body>
+<docu id="wzq_save_observ_points">
+<parameters>
+<parameter id="CalibHandle"/>
+<parameter id="CalibObjPoseNum"/>
+<parameter id="FileName"/>
+<parameter id="Reversed"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_transform_project">
+<interface>
+<oo>
+<par name="CalPlate" base_type="iconic" dimension="0"/>
+</oo>
+<ic>
+<par name="HomMat3D" base_type="ctrl" dimension="0"/>
+<par name="Pose" base_type="ctrl" dimension="0"/>
+<par name="RowOut" base_type="ctrl" dimension="0"/>
+<par name="ColOut" base_type="ctrl" dimension="0"/>
+<par name="RowIn" base_type="ctrl" dimension="0"/>
+<par name="ColIn" base_type="ctrl" dimension="0"/>
+<par name="Width" base_type="ctrl" dimension="0"/>
+<par name="Height" base_type="ctrl" dimension="0"/>
+<par name="Radius" base_type="ctrl" dimension="0"/>
+<par name="Ratio" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<l>PI := asin(1.0) * 2.0</l>
+<c></c>
+<l>hom_mat3d_identity (HomMat3DIdentity)</l>
+<l>hom_mat3d_translate (HomMat3DIdentity, -ColIn[0], -RowIn[0], 0, HomMatS2W)</l>
+<l>hom_mat3d_translate (HomMat3DIdentity,  ColIn[0],  RowIn[0], 0, HomMatW2S)</l>
+<l>hom_mat3d_scale (HomMat3DIdentity, Ratio, Ratio, Ratio, 0, 0, 0, HomMatP2M)</l>
+<l>hom_mat3d_scale (HomMat3DIdentity, 1.0 / Ratio, 1.0 / Ratio, 1.0 / Ratio, 0, 0, 0, HomMatM2P)</l>
+<c></c>
+<l>pose_to_hom_mat3d (Pose, HomMatW2C)</l>
+<l>hom_mat3d_invert (HomMatW2C, HomMatC2W)</l>
+<l>wzq_affine_trans_plane_3d (HomMatW2C, 0, 0, 1, 0, a, b, c, d)</l>
+<l>wzq_hom_mat3d_project (HomMat3DIdentity, a, b, c, d, HomMatProject)</l>
+<c></c>
+<l>hom_mat3d_compose (HomMatP2M, HomMatS2W, HomMat)</l>
+<l>hom_mat3d_compose (HomMat3D, HomMat, HomMat)</l>
+<l>hom_mat3d_compose (HomMatW2C, HomMat, HomMat)</l>
+<l>hom_mat3d_compose (HomMatProject, HomMat, HomMat)</l>
+<l>hom_mat3d_compose (HomMatC2W, HomMat, HomMat)</l>
+<l>hom_mat3d_compose (HomMatM2P, HomMat, HomMat)</l>
+<l>hom_mat3d_compose (HomMatW2S, HomMat, HomMat)</l>
+<c></c>
+<l>tuple_gen_const (|RowOut|, 0, ZOut)</l>
+<l>tuple_gen_const (|RowIn|, 0, ZIn)</l>
+<c></c>
+<l>projective_trans_point_3d (HomMat, ColOut, RowOut, ZOut, ColOut, RowOut, ZOut)</l>
+<l>projective_trans_point_3d (HomMat, ColIn, RowIn, ZIn, ColIn, RowIn, ZIn)</l>
+<c></c>
+<c></c>
+<l>gen_image_const (CalPlate, 'byte', Width, Height)</l>
+<l>get_domain (CalPlate, Domain)</l>
+<l>paint_region (Domain, CalPlate, CalPlate, 0, 'fill')</l>
+<c></c>
+<l>tuple_gen_const (|RowOut|, Radius, Rad)</l>
+<l>gen_circle_contour_xld (Circles, RowOut, ColOut, Rad, 0, PI * 2.0, 'positive', 0.1)</l>
+<l>paint_xld (Circles, CalPlate, CalPlate, 255)</l>
+<c></c>
+<l>tuple_gen_const (|RowIn|, Radius / 2.0, Rad)</l>
+<l>gen_circle_contour_xld (CirclesIn, RowIn, ColIn, Rad, 0, PI * 2.0, 'positive', 0.1)</l>
+<l>paint_xld (CirclesIn, CalPlate, CalPlate, 0)</l>
+<l>return ()</l>
+</body>
+<docu id="wzq_transform_project">
+<parameters>
+<parameter id="CalPlate"/>
+<parameter id="ColIn"/>
+<parameter id="ColOut"/>
+<parameter id="Height"/>
+<parameter id="HomMat3D"/>
+<parameter id="Pose"/>
+<parameter id="Radius"/>
+<parameter id="Ratio"/>
+<parameter id="RowIn"/>
+<parameter id="RowOut"/>
+<parameter id="Width"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_tuple_atan">
+<interface>
+<ic>
+<par name="TU" base_type="ctrl" dimension="0"/>
+<par name="TD" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="ATan" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<l>if (|TU| != |TD|)</l>
+<l>    throw ('Wrong number of numerator and denominator!')</l>
+<l>endif</l>
+<c></c>
+<l>ATan := []</l>
+<l>for Index := 0 to |TD| - 1 by 1</l>
+<l>    if (TU[Index] &lt;= TD[Index])</l>
+<l>        tuple_atan2 (1, 0, ATan)</l>
+<l>    else</l>
+<c>        </c>
+<l>    endif</l>
+<l>endfor</l>
+<l>return ()</l>
+</body>
+<docu id="wzq_tuple_atan">
+<parameters>
+<parameter id="ATan"/>
+<parameter id="TD"/>
+<parameter id="TU"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_write_camera_volume_vtk">
+<interface>
+<ic>
+<par name="Focus" base_type="ctrl" dimension="0"/>
+<par name="Sx" base_type="ctrl" dimension="0"/>
+<par name="Sy" base_type="ctrl" dimension="0"/>
+<par name="ImageWidth" base_type="ctrl" dimension="0"/>
+<par name="ImageHeight" base_type="ctrl" dimension="0"/>
+<par name="Z1" base_type="ctrl" dimension="0"/>
+<par name="Z2" base_type="ctrl" dimension="0"/>
+<par name="Degree" base_type="ctrl" dimension="0"/>
+<par name="Shift" base_type="ctrl" dimension="0"/>
+<par name="FileName" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="BaseLine" base_type="ctrl" dimension="0"/>
+<par name="Width" base_type="ctrl" dimension="0"/>
+<par name="Height" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<l>open_file (FileName, 'output', FileHandle)</l>
+<c></c>
+<l>wzq_fwrite_line (FileHandle, '# vtk DataFile Version 1.0')</l>
+<l>wzq_fwrite_line (FileHandle, 'Generated by wzq_write_point_vtk')</l>
+<l>wzq_fwrite_line (FileHandle, 'ASCII')</l>
+<l>wzq_fwrite_line (FileHandle, 'DATASET UNSTRUCTURED_GRID')</l>
+<c></c>
+<l>wzq_fwrite_line (FileHandle, 'POINTS 40 double')</l>
+<c></c>
+<l>campar := [Focus, 0, Sx, Sy, ImageWidth / 2., ImageHeight / 2., ImageWidth, ImageHeight]</l>
+<l>Rows := [0, 0, ImageHeight, ImageHeight]</l>
+<l>Cols := [0, ImageWidth, 0, ImageWidth]</l>
+<c></c>
+<l>PI := asin(1.) * 2</l>
+<l>Ra := Degree / 180. * PI</l>
+<l>cosD := cos(Ra)</l>
+<l>sinD := sin(Ra)</l>
+<c></c>
+<l>create_pose (0, 0, Z1 / cosD, 0, -Degree, 0, 'Rp+T', 'gba', 'point', Pose1)</l>
+<l>create_pose (0, 0, Z2 / cosD, 0, -Degree, 0, 'Rp+T', 'gba', 'point', Pose2)</l>
+<l>image_points_to_world_plane (campar, Pose1, Rows, Cols, 'm', x1, y1)</l>
+<l>image_points_to_world_plane (campar, Pose2, Rows, Cols, 'm', x2, y2)</l>
+<l>z1 := gen_tuple_const(4, 0)</l>
+<l>z2 := gen_tuple_const(4, 0)</l>
+<c></c>
+<l>pose_to_hom_mat3d (Pose1, HomMat3DTabToCam1)</l>
+<l>pose_to_hom_mat3d (Pose2, HomMat3DTabToCam2)</l>
+<c></c>
+<l>hom_mat3d_rotate (HomMat3DTabToCam1, Ra, 'y', 0, 0, 0, HomMat3DTabToWorls1)</l>
+<l>hom_mat3d_rotate (HomMat3DTabToCam2, Ra, 'y', 0, 0, 0, HomMat3DTabToWorls2)</l>
+<c></c>
+<l>affine_trans_point_3d (HomMat3DTabToWorls1, x1, y1, z1, x1, y1, z1)</l>
+<l>affine_trans_point_3d (HomMat3DTabToWorls2, x2, y2, z2, x2, y2, z2)</l>
+<c></c>
+<l>X := [x1, x2]</l>
+<l>Y := [y1, y2]</l>
+<l>Z := [z1, z2]</l>
+<c></c>
+<l>create_pose (0, 0, Z1 / cosD, 0, Degree, 0, 'Rp+T', 'gba', 'point', Pose3)</l>
+<l>create_pose (0, 0, Z2 / cosD, 0, Degree, 0, 'Rp+T', 'gba', 'point', Pose4)</l>
+<l>image_points_to_world_plane (campar, Pose3, Rows, Cols, 'm', x3, y3)</l>
+<l>image_points_to_world_plane (campar, Pose4, Rows, Cols, 'm', x4, y4)</l>
+<l>z3 := gen_tuple_const(4, 0)</l>
+<l>z4 := gen_tuple_const(4, 0)</l>
+<c></c>
+<l>pose_to_hom_mat3d (Pose3, HomMat3DTabToCam3)</l>
+<l>pose_to_hom_mat3d (Pose4, HomMat3DTabToCam4)</l>
+<c></c>
+<l>hom_mat3d_rotate (HomMat3DTabToCam3, -Ra, 'y', 0, 0, 0, HomMat3DTabToWorls3)</l>
+<l>hom_mat3d_rotate (HomMat3DTabToCam4, -Ra, 'y', 0, 0, 0, HomMat3DTabToWorls4)</l>
+<c></c>
+<l>affine_trans_point_3d (HomMat3DTabToWorls3, x3, y3, z3, x3, y3, z3)</l>
+<l>affine_trans_point_3d (HomMat3DTabToWorls4, x4, y4, z4, x4, y4, z4)</l>
+<c></c>
+<l>if (Shift == [])</l>
+<l>    minX := min(x2)</l>
+<l>    maxX := max(x2)</l>
+<l>    Shift := minX + maxX</l>
+<l>endif</l>
+<c></c>
+<l>BaseLine := Shift</l>
+<l>Width  := [max(x1) - min(x1), max(x2) - min(x2)]</l>
+<l>Height := [max(y1) - min(y1), max(y2) - min(y2)]</l>
+<c></c>
+<l>X := [x1 - Shift / 2., x2 - Shift / 2., x3 + Shift / 2., x4 + Shift / 2.]</l>
+<l>Y := [y1, y2, y3, y4]</l>
+<l>Z := [z1, z2, z3, z4]</l>
+<c></c>
+<c></c>
+<l>oriX := [0, Z1 / 2., 0, 0]</l>
+<l>oriY := [0, 0, Z1 / 2., 0]</l>
+<l>oriZ := [0, 0, 0, Z1 / 2.]</l>
+<c></c>
+<l>X := [X, oriX - Shift / 2., oriX + Shift / 2.]</l>
+<l>Y := [Y, oriY, oriY]</l>
+<l>Z := [Z, oriZ, oriZ]</l>
+<c></c>
+<l>Cx := [-0.015, 0.015, -0.015, 0.015]</l>
+<l>Cy := [0.015, 0.015, -0.015, -0.015]</l>
+<l>Cz := [0, 0, 0, 0]</l>
+<c></c>
+<l>Cx := [Cx, Cx]</l>
+<l>Cy := [Cy, Cy]</l>
+<l>Cz := [Cz, -0.1, -0.1, -0.1, -0.1]</l>
+<c></c>
+<l>hom_mat3d_identity (HomMat3DIdentity)</l>
+<l>hom_mat3d_rotate (HomMat3DIdentity, Ra, 'y', 0, 0, 0, HomMat3DRotate)</l>
+<l>affine_trans_point_3d (HomMat3DRotate, Cx, Cy, Cz, Cx, Cy, Cz)</l>
+<c></c>
+<l>Cx := [Cx - Shift / 2., Cx * -1. + Shift / 2.]</l>
+<l>Cy := [Cy, Cy]</l>
+<l>Cz := [Cz, Cz]</l>
+<c></c>
+<l>X := [X, Cx]</l>
+<l>Y := [Y, Cy]</l>
+<l>Z := [Z, Cz]</l>
+<c></c>
+<l>Point := X + ' ' + Y + ' ' + Z + '\n'</l>
+<l>fwrite_string (FileHandle, Point)</l>
+<c></c>
+<l>wzq_fwrite_line (FileHandle, 'CELLS 12 66')</l>
+<c>* Volume L</c>
+<l>wzq_fwrite_line (FileHandle, '8 0 1 2 3 4 5 6 7')</l>
+<c>* Volume R</c>
+<l>wzq_fwrite_line (FileHandle, '8 8 9 10 11 12 13 14 15')</l>
+<c></c>
+<c>* X axis</c>
+<l>wzq_fwrite_line (FileHandle, '2 16 17')</l>
+<c>* Y axis</c>
+<l>wzq_fwrite_line (FileHandle, '2 16 18')</l>
+<c>* Z axis</c>
+<l>wzq_fwrite_line (FileHandle, '2 16 19')</l>
+<c></c>
+<c>* X axis</c>
+<l>wzq_fwrite_line (FileHandle, '2 20 21')</l>
+<c>* Y axis</c>
+<l>wzq_fwrite_line (FileHandle, '2 20 22')</l>
+<c>* Z axis</c>
+<l>wzq_fwrite_line (FileHandle, '2 20 23')</l>
+<c>* Camera L</c>
+<l>wzq_fwrite_line (FileHandle, '8 24 25 26 27 28 29 30 31')</l>
+<c>* Camera R</c>
+<l>wzq_fwrite_line (FileHandle, '8 32 33 34 35 36 37 38 39')</l>
+<c></c>
+<l>wzq_fwrite_line (FileHandle, '5 0 1 3 2 16')</l>
+<l>wzq_fwrite_line (FileHandle, '5 8 9 11 10 20')</l>
+<c></c>
+<l>wzq_fwrite_line (FileHandle, 'CELL_TYPES 12')</l>
+<l>wzq_fwrite_line (FileHandle, '11')</l>
+<l>wzq_fwrite_line (FileHandle, '11')</l>
+<c></c>
+<l>wzq_fwrite_line (FileHandle, '3')</l>
+<l>wzq_fwrite_line (FileHandle, '3')</l>
+<l>wzq_fwrite_line (FileHandle, '3')</l>
+<c></c>
+<l>wzq_fwrite_line (FileHandle, '3')</l>
+<l>wzq_fwrite_line (FileHandle, '3')</l>
+<l>wzq_fwrite_line (FileHandle, '3')</l>
+<c></c>
+<l>wzq_fwrite_line (FileHandle, '11')</l>
+<l>wzq_fwrite_line (FileHandle, '11')</l>
+<c></c>
+<l>wzq_fwrite_line (FileHandle, '14')</l>
+<l>wzq_fwrite_line (FileHandle, '14')</l>
+<c></c>
+<l>wzq_fwrite_line (FileHandle, 'CELL_DATA 12')</l>
+<l>wzq_fwrite_line (FileHandle, 'SCALARS cell_scalars float 1')</l>
+<l>wzq_fwrite_line (FileHandle, 'LOOKUP_TABLE my_table')</l>
+<c>* [0.0 0.125 0.25 0.375 0.5 0.625 0.75 0.875 1.0]</c>
+<l>wzq_fwrite_line (FileHandle, '0.0 0.125 0.25 0.375 0.5 0.25 0.375 0.5 0.625 0.75 0.875 1.0')</l>
+<c></c>
+<l>wzq_fwrite_line (FileHandle, 'LOOKUP_TABLE my_table 9')</l>
+<c>* Volume L</c>
+<l>wzq_fwrite_line (FileHandle, '0.5 0.0 0.0 1.0')</l>
+<c>* Volume R</c>
+<l>wzq_fwrite_line (FileHandle, '0.0 0.0 0.5 1.0')</l>
+<c>* X axis Red</c>
+<l>wzq_fwrite_line (FileHandle, '1.0 0.0 0.0 1.0')</l>
+<c>* Y axis Yellow</c>
+<l>wzq_fwrite_line (FileHandle, '1.0 1.0 0.0 1.0')</l>
+<c>* Z axis Green</c>
+<l>wzq_fwrite_line (FileHandle, '0.0 1.0 0.0 1.0')</l>
+<c>* Camera L</c>
+<l>wzq_fwrite_line (FileHandle, '0.2 0.0 0.0 1.0')</l>
+<c>* Camera R</c>
+<l>wzq_fwrite_line (FileHandle, '0.0 0.0 0.2 1.0')</l>
+<c>* Pyramid L</c>
+<l>wzq_fwrite_line (FileHandle, '1.0 1.0 1.0 0.5')</l>
+<c>* Pyramid R</c>
+<l>wzq_fwrite_line (FileHandle, '1.0 1.0 1.0 0.5')</l>
+<c></c>
+<l>close_file (FileHandle)</l>
+<c></c>
+<l>return ()</l>
+</body>
+<docu id="wzq_write_camera_volume_vtk">
+<parameters>
+<parameter id="BaseLine"/>
+<parameter id="Degree"/>
+<parameter id="FileName">
+<default_type>string</default_type>
+<file_ext>
+<item>vtk</item>
+</file_ext>
+<file_ext_descr lang="zh_CN">
+<item>Visualization toolkit file</item>
+</file_ext_descr>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>filename.write</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<values>
+<item>'point.vtk'</item>
+</values>
+</parameter>
+<parameter id="Focus"/>
+<parameter id="Height"/>
+<parameter id="ImageHeight"/>
+<parameter id="ImageWidth"/>
+<parameter id="Shift"/>
+<parameter id="Sx"/>
+<parameter id="Sy"/>
+<parameter id="Width"/>
+<parameter id="Z1"/>
+<parameter id="Z2"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzq_write_tuple_binary">
+<interface>
+<ic>
+<par name="FileName" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="Tuple" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<l>open_file (FileName, 'output_binary', FileHandle)</l>
+<l>serialize_tuple (Tuple, SerializedItemHandle)</l>
+<l>fwrite_serialized_item (FileHandle, SerializedItemHandle)</l>
+<l>close_file (FileHandle)</l>
+<l>return ()</l>
+</body>
+<docu id="wzq_write_tuple_binary">
+<parameters>
+<parameter id="FileName">
+<default_type>string</default_type>
+<default_value>''</default_value>
+<file_ext>
+<item>tup</item>
+</file_ext>
+<file_ext_descr lang="zh_CN">
+<item>Binary tuple file</item>
+</file_ext_descr>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>filename.write</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+<parameter id="Tuple">
+<sem_type>any</sem_type>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzql_is_file_exist" access="local">
+<interface>
+<ic>
+<par name="FileName" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* Throw if FileName is empty.</c>
+<l>if (FileName == [])</l>
+<l>    throw ('FileName is empty.')</l>
+<l>endif</l>
+<c></c>
+<c>* Validate each one of FileName, throw if any one cannot be found.</c>
+<l>for Index := 0 to |FileName| - 1 by 1</l>
+<l>    file_exists (FileName[Index], FileExists)</l>
+<l>    if (FileExists == 0)</l>
+<l>        throw ('&lt;' + FileName[Index] + '&gt; cannot be found.')</l>
+<l>    endif</l>
+<l>endfor</l>
+<c></c>
+<l>return ()</l>
+</body>
+<docu id="wzql_is_file_exist">
+<abstract lang="zh_CN">Validate the existance of file(s).
+
+If FileName is empty or any one of FileName cannot be found, exception is to be thrown.</abstract>
+<chapters lang="zh_CN">
+<item>wzq</item>
+<item>Validate</item>
+</chapters>
+<library lang="zh_CN">halcon_wzq</library>
+<short lang="zh_CN">Validate the existance of file(s).</short>
+<parameters>
+<parameter id="FileName">
+<description lang="zh_CN">File name(s) to be validated.</description>
+<mixed_type>false</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>filename.read</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzql_is_image_valid" access="local">
+<interface>
+<io>
+<par name="Image" base_type="iconic" dimension="0"/>
+</io>
+</interface>
+<body>
+<c>* Throw if Image is empty.</c>
+<l>count_obj (Image, Number)</l>
+<l>if (Number == 0)</l>
+<l>    throw ('Image is empty.')</l>
+<l>endif</l>
+<c></c>
+<c>* Validate each one of Image.</c>
+<l>for Index := 1 to Number by 1</l>
+<l>    select_obj (Image, ObjectSelected, Number)</l>
+<l>    get_image_size (ObjectSelected, Width, Height)</l>
+<l>    if (Width == 0 or Height == 0)</l>
+<l>        throw ('Image is invalid.')</l>
+<l>    endif</l>
+<l>endfor</l>
+<c></c>
+<l>return ()</l>
+</body>
+<docu id="wzql_is_image_valid">
+<abstract lang="zh_CN">Validate Image(s).
+
+Throw if Image is empty.
+
+Throw if any one of Image(s) is invalidate.</abstract>
+<chapters lang="zh_CN">
+<item>wzq</item>
+<item>Validate</item>
+</chapters>
+<library lang="zh_CN">halcon_wzq</library>
+<short lang="zh_CN">Validate Image(s).</short>
+<parameters>
+<parameter id="Image">
+<description lang="zh_CN">Image(s) to be validated.</description>
+<multichannel>optional</multichannel>
+<multivalue>optional</multivalue>
+<sem_type>image</sem_type>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="wzql_setup_calib_data" access="local">
+<interface>
+<ic>
+<par name="Width" base_type="ctrl" dimension="0"/>
+<par name="Height" base_type="ctrl" dimension="0"/>
+<par name="CalPlateDescr" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="CalibDataID" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* Validate input control parameters.</c>
+<l>if (Width &lt;= 0)</l>
+<l>    throw ('Wrong value of control parameter Width.')</l>
+<l>endif</l>
+<c></c>
+<l>if (Height &lt;= 0)</l>
+<l>    throw ('Wrong value of control parameter Height.')</l>
+<l>endif</l>
+<c></c>
+<l>wzql_is_file_exist (CalPlateDescr)</l>
+<c></c>
+<l>StartCamPar := [8, 0, 0.008, 0.008, Width/2.0, Height/2.0, Width, Height]</l>
+<l>create_calib_data ('calibration_object', 1, 1, CalibDataID)</l>
+<l>set_calib_data_cam_param (CalibDataID, 0, 'area_scan_division', StartCamPar)</l>
+<l>set_calib_data_calib_object (CalibDataID, 0, CalPlateDescr)</l>
+<c></c>
+<l>return ()</l>
+</body>
+<docu id="wzql_setup_calib_data">
+<abstract lang="zh_CN">Setup a calibration data model, the result is returned in CalibDataID.
+
+This procedure use [8, 0.008, 0.008, Width / 2., Height / 2., Width, Height] as default camera parameter, and area scan division as the calibration model.</abstract>
+<chapters lang="zh_CN">
+<item>wzq</item>
+<item>Calibration</item>
+</chapters>
+<library lang="zh_CN">halcon_wzq</library>
+<short lang="zh_CN">Setup a calibration data model.</short>
+<parameters>
+<parameter id="CalPlateDescr">
+<default_value>'calplate.cpd'</default_value>
+<description lang="zh_CN">Calibration plate description file.</description>
+<file_ext>
+<item>cpd</item>
+</file_ext>
+<file_ext_descr lang="zh_CN">
+<item>Calibration Plate Description</item>
+</file_ext_descr>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>filename.read</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<values>
+<item>'calplate.cpd'</item>
+<item>'caltab.descr'</item>
+</values>
+</parameter>
+<parameter id="CalibDataID">
+<description lang="zh_CN">Calibration data ID.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>calib_data</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="Height">
+<description lang="zh_CN">Height of the image.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>extent.y</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="Width">
+<description lang="zh_CN">Width of the image.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>extent.x</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+</hdevelop>
